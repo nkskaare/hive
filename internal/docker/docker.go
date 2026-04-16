@@ -53,6 +53,11 @@ func CreateAndStart(name string, containerCfg *config.ContainerConfig, vars conf
 	return run("docker", args...)
 }
 
+// ExecDetached runs a command inside a container in detached mode
+func ExecDetached(container, command string) error {
+	return run("docker", "exec", "-d", container, "sh", "-c", command)
+}
+
 // Stop stops a container gracefully
 func Stop(name string) error {
 	return run("docker", "stop", name)

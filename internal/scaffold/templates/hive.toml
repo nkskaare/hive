@@ -14,9 +14,14 @@ volumes = [
 ]
 
 [container.env]
-GH_TOKEN = "{gh_token}"
+# Env values are shell-evaluated, so subshells and $VAR references work:
+# GH_TOKEN = "$(gh auth token)"
+# AWS_PROFILE = "$AWS_PROFILE"
 TASK_ID = "{agent_id}"
 PROJECT_NAME = "{project}"
+
+[agent]
+# command = "claude --dangerously-skip-permissions"
 
 [hooks]
 # post_spawn = ["./scripts/post-spawn.sh {agent_id}"]
