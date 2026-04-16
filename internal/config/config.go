@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -17,7 +19,8 @@ type Config struct {
 	Container ContainerConfig `toml:"container"`
 	Agent     AgentConfig     `toml:"agent"`
 	Hooks     HooksConfig     `toml:"hooks"`
-	Terminal  TerminalConfig  `toml:"terminal"`
+	Terminal  TerminalConfig    `toml:"terminal"`
+	UserVars  map[string]string `toml:"vars"`
 
 	// Resolved at load time, not from TOML
 	ProjectRoot string `toml:"-"`
@@ -59,13 +62,16 @@ type TerminalConfig struct {
 	Session  string `toml:"session"`
 }
 
-// Vars holds template variables resolved at runtime
+// Vars holds template variables resolved at runtime.
+// Built-in fields are available as {{ .Project }}, {{ .AgentID }}, etc.
+// User-defined vars from [vars] are available as {{ .Vars.key }}.
 type Vars struct {
 	Project     string
 	ProjectRoot string
 	AgentID     string
 	Worktree    string
 	Container   string
+	Vars        map[string]string
 }
 
 // Load reads and parses a hive.toml config file.
@@ -100,7 +106,7 @@ func Load(path string) (*Config, error) {
 		cfg.Project.Name = filepath.Base(cfg.ProjectRoot)
 	}
 	if cfg.Worktree.Root == "" {
-		cfg.Worktree.Root = "../{project}.worktrees"
+		cfg.Worktree.Root = "../{{ .Project }}.worktrees"
 	}
 	if cfg.Container.Workdir == "" {
 		cfg.Container.Workdir = "/app"
@@ -109,7 +115,7 @@ func Load(path string) (*Config, error) {
 		cfg.Terminal.Provider = "none"
 	}
 	if cfg.Terminal.Session == "" {
-		cfg.Terminal.Session = "{project}"
+		cfg.Terminal.Session = "{{ .Project }}"
 	}
 
 	return &cfg, nil
@@ -130,19 +136,30 @@ func AgentVars(cfg *Config, agentID string) Vars {
 	}
 	v.Worktree = filepath.Join(worktreeRoot, agentID)
 
+	// Resolve user-defined vars: template expansion first, then shell eval
+	if len(cfg.UserVars) > 0 {
+		v.Vars = make(map[string]string, len(cfg.UserVars))
+		for k, val := range cfg.UserVars {
+			resolved := Resolve(val, v)
+			v.Vars[k] = ShellEval(resolved)
+		}
+	}
+
 	return v
 }
 
-// Resolve replaces {template} variables in a string
+// Resolve replaces {{ .Var }} template variables in a string.
+// Returns the original string if the template is invalid.
 func Resolve(s string, v Vars) string {
-	r := strings.NewReplacer(
-		"{project}", v.Project,
-		"{project_root}", v.ProjectRoot,
-		"{agent_id}", v.AgentID,
-		"{worktree}", v.Worktree,
-		"{container}", v.Container,
-	)
-	return r.Replace(s)
+	tmpl, err := template.New("").Option("missingkey=zero").Parse(s)
+	if err != nil {
+		return s
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, v); err != nil {
+		return s
+	}
+	return buf.String()
 }
 
 // ShellEval evaluates a string as a shell expression.

@@ -1,20 +1,20 @@
 // Zellij tab layout for a hive agent container
-// {container} is substituted with the container name
+// {{ .Container }} is substituted with the container name
 layout {
-    tab name="{container}" {
+    tab name="{{ .Container }}" {
         pane split_direction="vertical" {
             pane name="Shell" size="60%" {
                 command "docker"
-                args "exec" "-it" "{container}" "bash" "-l"
+                args "exec" "-it" "{{ .Container }}" "bash" "-l"
             }
             pane split_direction="horizontal" {
                 pane name="Logs" {
                     command "docker"
-                    args "logs" "-f" "{container}"
+                    args "logs" "-f" "{{ .Container }}"
                 }
                 pane name="Stats" size="20%" {
                     command "bash"
-                    args "-c" "watch -n2 docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' {container}"
+                    args "-c" "watch -n2 docker stats --no-stream --format 'table {{`{{.Name}}`}}\t{{`{{.CPUPerc}}`}}\t{{`{{.MemUsage}}`}}' {{ .Container }}"
                 }
             }
         }

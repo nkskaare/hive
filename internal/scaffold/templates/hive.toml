@@ -1,15 +1,20 @@
 # [project]
 # name = "my-project"       # Auto-detected from directory name
 
+# [vars]
+# Custom variables that can reference built-in vars (Project, ProjectRoot, etc.)
+# and be used elsewhere in this file as {{ .Vars.key }}
+# git_dir = "{{ .ProjectRoot }}/.git"
+
 [worktree]
-# root = "../{project}.worktrees"
+# root = "../{{ .Project }}.worktrees"
 
 [container]
 image = "hive-agent:latest"
 workdir = "/app"
 volumes = [
-    "{worktree}:/app",
-    "{project_root}/.git:{project_root}/.git",
+    "{{ .Worktree }}:/app",
+    "{{ .ProjectRoot }}/.git:{{ .ProjectRoot }}/.git",
     "entrypoint.sh:/usr/local/bin/entrypoint.sh",
 ]
 
@@ -17,17 +22,17 @@ volumes = [
 # Env values are shell-evaluated, so subshells and $VAR references work:
 # GH_TOKEN = "$(gh auth token)"
 # AWS_PROFILE = "$AWS_PROFILE"
-TASK_ID = "{agent_id}"
-PROJECT_NAME = "{project}"
+TASK_ID = "{{ .AgentID }}"
+PROJECT_NAME = "{{ .Project }}"
 
 [agent]
 # command = "claude --dangerously-skip-permissions"
 
 [hooks]
-# post_spawn = ["./scripts/post-spawn.sh {agent_id}"]
-# pre_kill = ["./scripts/pre-kill.sh {agent_id}"]
+# post_spawn = ["./scripts/post-spawn.sh {{ .AgentID }}"]
+# pre_kill = ["./scripts/pre-kill.sh {{ .AgentID }}"]
 
 [terminal]
 provider = "none"        # "zellij" | "tmux" | "none"
 # layout = "agent-tab.kdl"
-# session = "{project}"
+# session = "{{ .Project }}"
