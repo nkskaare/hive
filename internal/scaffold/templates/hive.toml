@@ -1,0 +1,28 @@
+# [project]
+# name = "my-project"       # Auto-detected from directory name
+
+[worktree]
+# root = "../{project}.worktrees"
+
+[container]
+image = "hive-agent:latest"
+workdir = "/app"
+volumes = [
+    "{worktree}:/app",
+    "{project_root}/.git:{project_root}/.git",
+    "entrypoint.sh:/usr/local/bin/entrypoint.sh",
+]
+
+[container.env]
+GH_TOKEN = "{gh_token}"
+TASK_ID = "{agent_id}"
+PROJECT_NAME = "{project}"
+
+[hooks]
+# post_spawn = ["./scripts/post-spawn.sh {agent_id}"]
+# pre_kill = ["./scripts/pre-kill.sh {agent_id}"]
+
+[terminal]
+provider = "none"        # "zellij" | "tmux" | "none"
+# layout = "agent-tab.kdl"
+# session = "{project}"
