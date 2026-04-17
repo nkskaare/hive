@@ -7,13 +7,13 @@ Nothing revolutionary — it just automates the tedious parts: creating a worktr
 ## Install
 
 ```bash
-go install github.com/hive-sandbox/hive@latest
+go install github.com/nkskaare/hive@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/hive-sandbox/hive.git
+git clone https://github.com/nkskaare/hive.git
 cd hive
 go build -o hive .
 ```

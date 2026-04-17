@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
-	"github.com/hive-sandbox/hive/internal/agent"
-	"github.com/hive-sandbox/hive/internal/ui"
+	"github.com/nkskaare/hive/internal/agent"
+	"github.com/nkskaare/hive/internal/ui"
 	"github.com/spf13/cobra"
 )
 

@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh/spinner"
-	"github.com/hive-sandbox/hive/internal/config"
-	"github.com/hive-sandbox/hive/internal/docker"
-	"github.com/hive-sandbox/hive/internal/terminal"
-	"github.com/hive-sandbox/hive/internal/ui"
-	"github.com/hive-sandbox/hive/internal/worktree"
+	"github.com/nkskaare/hive/internal/config"
+	"github.com/nkskaare/hive/internal/docker"
+	"github.com/nkskaare/hive/internal/terminal"
+	"github.com/nkskaare/hive/internal/ui"
+	"github.com/nkskaare/hive/internal/worktree"
 )
 
 // Agent represents a hive-managed agent sandbox

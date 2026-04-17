@@ -1,6 +1,6 @@
 package main
 
-import "github.com/hive-sandbox/hive/cmd"
+import "github.com/nkskaare/hive/cmd"
 
 func main() {
 	cmd.Execute()

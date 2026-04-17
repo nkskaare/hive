@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hive-sandbox/hive/internal/config"
+	"github.com/nkskaare/hive/internal/config"
 	"github.com/spf13/cobra"
 )
 

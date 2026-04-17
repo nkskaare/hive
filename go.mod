@@ -1,4 +1,4 @@
-module github.com/hive-sandbox/hive
+module github.com/nkskaare/hive
 
 go 1.24.2
 

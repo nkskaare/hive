@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hive-sandbox/hive/internal/config"
+	"github.com/nkskaare/hive/internal/config"
 )
 
 // CreateAndStart assembles and runs `docker run -d` from the resolved config.

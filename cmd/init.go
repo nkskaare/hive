@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/hive-sandbox/hive/internal/scaffold"
-	"github.com/hive-sandbox/hive/internal/ui"
+	"github.com/nkskaare/hive/internal/scaffold"
+	"github.com/nkskaare/hive/internal/ui"
 	"github.com/spf13/cobra"
 )
 

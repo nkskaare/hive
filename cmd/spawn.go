@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	"github.com/hive-sandbox/hive/internal/agent"
+	"github.com/nkskaare/hive/internal/agent"
 	"github.com/spf13/cobra"
 )
 
