@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -239,7 +240,7 @@ func resolveLayout(cfg *config.Config, vars config.Vars) (string, error) {
 		return "", fmt.Errorf("reading layout %s: %w", layoutPath, err)
 	}
 
-	resolved := config.Resolve(string(data), vars)
+	resolved := resolveLayoutVars(string(data), vars)
 
 	tmp, err := os.CreateTemp("", "hive-layout-*.kdl")
 	if err != nil {
@@ -252,4 +253,22 @@ func resolveLayout(cfg *config.Config, vars config.Vars) (string, error) {
 	}
 	tmp.Close()
 	return tmp.Name(), nil
+}
+
+// resolveLayoutVars substitutes {var} placeholders in layout files.
+// Uses simple string replacement instead of Go templates to avoid
+// conflicts with Docker format strings like {{.Name}}.
+func resolveLayoutVars(content string, vars config.Vars) string {
+	pairs := []string{
+		"{container}", vars.Container,
+		"{agent_id}", vars.AgentID,
+		"{project}", vars.Project,
+		"{project_root}", vars.ProjectRoot,
+		"{config_dir}", vars.ConfigDir,
+		"{worktree}", vars.Worktree,
+	}
+	for k, v := range vars.Vars {
+		pairs = append(pairs, "{vars."+k+"}", v)
+	}
+	return strings.NewReplacer(pairs...).Replace(content)
 }
