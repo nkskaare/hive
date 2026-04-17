@@ -68,6 +68,7 @@ type TerminalConfig struct {
 type Vars struct {
 	Project     string
 	ProjectRoot string
+	ConfigDir   string
 	AgentID     string
 	Worktree    string
 	Container   string
@@ -126,6 +127,7 @@ func AgentVars(cfg *Config, agentID string) Vars {
 	v := Vars{
 		Project:     cfg.Project.Name,
 		ProjectRoot: cfg.ProjectRoot,
+		ConfigDir:   cfg.ConfigDir,
 		AgentID:     agentID,
 		Container:   "hive-" + agentID,
 	}

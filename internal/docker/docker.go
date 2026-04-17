@@ -47,7 +47,7 @@ func volumeArgs(containerCfg *config.ContainerConfig, vars config.Vars) ([]strin
 		v := config.Resolve(vol, vars)
 		parts := strings.SplitN(v, ":", 2)
 		if len(parts) == 2 && !filepath.IsAbs(parts[0]) {
-			parts[0] = filepath.Join(vars.ProjectRoot, parts[0])
+			parts[0] = filepath.Join(vars.ConfigDir, parts[0])
 			v = strings.Join(parts, ":")
 		}
 		resolved = append(resolved, v)

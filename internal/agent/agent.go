@@ -215,7 +215,7 @@ func List(cfg *config.Config) ([]Agent, error) {
 
 func runHook(command string, vars config.Vars) error {
 	cmd := exec.Command("sh", "-c", command)
-	cmd.Dir = vars.ProjectRoot
+	cmd.Dir = vars.ConfigDir
 	cmd.Stdout = ui.IndentWriter(os.Stdout)
 	cmd.Stderr = ui.IndentWriter(os.Stderr)
 	cmd.Env = append(os.Environ(),
