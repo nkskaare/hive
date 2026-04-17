@@ -1,5 +1,7 @@
 package terminal
 
+import "fmt"
+
 // Provider is the interface for terminal multiplexer integrations.
 // Implementations manage sessions and tabs for agent monitoring.
 type Provider interface {
@@ -7,8 +9,14 @@ type Provider interface {
 	// Creates the session if it doesn't exist.
 	AddTab(session, containerName, layoutFile string) error
 
+	// Attach connects to an existing session and focuses the named tab
+	Attach(session, tabName string) error
+
 	// HasSession checks if a named session exists
 	HasSession(session string) bool
+
+	// HasTab checks if a named tab exists in the session
+	HasTab(session, tabName string) bool
 
 	// RemoveSession removes a session
 	RemoveSession(session string) error
@@ -31,6 +39,8 @@ func NewProvider(name string) Provider {
 type Noop struct{}
 
 func (n *Noop) AddTab(_, _, _ string) error    { return nil }
+func (n *Noop) Attach(_, _ string) error        { return fmt.Errorf("no terminal provider configured") }
 func (n *Noop) HasSession(_ string) bool        { return false }
+func (n *Noop) HasTab(_, _ string) bool          { return false }
 func (n *Noop) RemoveSession(_ string) error    { return nil }
 func (n *Noop) Name() string                    { return "none" }

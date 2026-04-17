@@ -121,19 +121,9 @@ func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error 
 
 	ui.SuccessMsg(fmt.Sprintf("Agent %s ready (%s)", ui.Bold.Render(agentID), vars.Container))
 
-	// 5. Terminal tab (may block if creating a new session)
-	if cfg.Terminal.Layout != "" {
-		session := config.Resolve(cfg.Terminal.Session, vars)
-		layoutFile, err := resolveLayout(cfg, vars)
-		if err != nil {
-			ui.WarnMsg(fmt.Sprintf("Layout error: %v", err))
-		} else {
-			tp := terminal.NewProvider(cfg.Terminal.Provider)
-			if err := tp.AddTab(session, vars.Container, layoutFile); err != nil {
-				ui.WarnMsg(fmt.Sprintf("Terminal: %v", err))
-			}
-			os.Remove(layoutFile)
-		}
+	// 5. Attach terminal tab
+	if err := Attach(cfg, agentID); err != nil {
+		ui.WarnMsg(fmt.Sprintf("Terminal: %v", err))
 	}
 
 	return nil
@@ -193,6 +183,44 @@ func Kill(cfg *config.Config, agentID string, keepBranch, disableHooks bool) err
 
 	ui.SuccessMsg(fmt.Sprintf("Agent %s cleaned up", ui.Bold.Render(agentID)))
 	return nil
+}
+
+// Attach opens or focuses the terminal tab for an agent.
+// If the session doesn't have the agent's tab yet, it adds the layout first.
+// If no session exists, it creates one.
+func Attach(cfg *config.Config, agentID string) error {
+	if cfg.Terminal.Layout == "" {
+		return nil
+	}
+
+	vars := config.AgentVars(cfg, agentID)
+	tp := terminal.NewProvider(cfg.Terminal.Provider)
+	session := config.Resolve(cfg.Terminal.Session, vars)
+
+	if !tp.HasSession(session) {
+		// No session: create with layout (may block to attach)
+		layoutFile, err := resolveLayout(cfg, vars)
+		if err != nil {
+			return fmt.Errorf("layout: %w", err)
+		}
+		defer os.Remove(layoutFile)
+		return tp.AddTab(session, vars.Container, layoutFile)
+	}
+
+	// Session exists: check if tab already exists, if not add it
+	if !tp.HasTab(session, vars.Container) {
+		layoutFile, err := resolveLayout(cfg, vars)
+		if err != nil {
+			return fmt.Errorf("layout: %w", err)
+		}
+		defer os.Remove(layoutFile)
+		if err := tp.AddTab(session, vars.Container, layoutFile); err != nil {
+			return err
+		}
+	}
+
+	// Focus the tab and attach
+	return tp.Attach(session, vars.Container)
 }
 
 // List returns all active agents for the project
