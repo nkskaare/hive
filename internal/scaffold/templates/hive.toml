@@ -23,8 +23,9 @@ volumes = [
 # Env values are shell-evaluated, so subshells and $VAR references work:
 # GH_TOKEN = "$(gh auth token)"
 # AWS_PROFILE = "$AWS_PROFILE"
-TASK_ID = "{{ .WorkerID }}"
-PROJECT_NAME = "{{ .Project }}"
+#
+# These are always injected automatically:
+#   HIVE_WORKER_ID, HIVE_PROJECT, HIVE_PROJECT_ROOT
 
 # [container.build]
 # dockerfile = "Dockerfile"

@@ -31,7 +31,12 @@ func CreateAndStart(name string, containerCfg *config.ContainerConfig, vars conf
 }
 
 func envArgs(containerCfg *config.ContainerConfig, vars config.Vars) []string {
-	var args []string
+	// Always inject hive built-in env vars
+	args := []string{
+		"-e", "HIVE_WORKER_ID=" + vars.WorkerID,
+		"-e", "HIVE_PROJECT=" + vars.Project,
+		"-e", "HIVE_PROJECT_ROOT=" + vars.ProjectRoot,
+	}
 	for k, v := range containerCfg.Env {
 		resolved := config.Resolve(v, vars)
 		val := config.ShellEval(resolved)
@@ -96,6 +101,30 @@ func Build(tag, dockerfile, context string) error {
 // Stop stops a container gracefully
 func Stop(name string) error {
 	return run("docker", "stop", name)
+}
+
+// ContainerStats holds resource usage for a running container
+type ContainerStats struct {
+	CPU    string
+	Memory string
+}
+
+// Stats returns CPU and memory usage for a container.
+// Returns zero values if the container is not running.
+func Stats(name string) ContainerStats {
+	out, err := exec.Command("docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}\t{{.MemUsage}}", name).Output()
+	if err != nil {
+		return ContainerStats{}
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(out)), "\t", 2)
+	if len(parts) != 2 {
+		return ContainerStats{}
+	}
+	mem := parts[1]
+	if idx := strings.Index(mem, " / "); idx != -1 {
+		mem = mem[:idx]
+	}
+	return ContainerStats{CPU: parts[0], Memory: mem}
 }
 
 // Remove forcefully removes a container

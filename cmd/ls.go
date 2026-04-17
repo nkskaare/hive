@@ -28,7 +28,7 @@ var lsCmd = &cobra.Command{
 		t := table.New().
 			Border(lipgloss.RoundedBorder()).
 			BorderStyle(lipgloss.NewStyle().Foreground(ui.Purple)).
-			Headers("ID", "BRANCH", "CONTAINER", "STATUS", "AGE").
+			Headers("ID", "BRANCH", "STATUS", "COMMITS", "CPU", "MEM", "AGE").
 			StyleFunc(func(row, col int) lipgloss.Style {
 				s := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 				if row == table.HeaderRow {
@@ -50,7 +50,20 @@ var lsCmd = &cobra.Command{
 			default:
 				status = lipgloss.NewStyle().Foreground(ui.Yellow).Render(status)
 			}
-			t.Row(w.ID, w.Branch, w.Container, status, formatDuration(time.Since(w.Created)))
+
+			commits := ""
+			if w.Commits > 0 {
+				commits = fmt.Sprintf("+%d", w.Commits)
+			}
+
+			cpu := w.CPU
+			mem := w.Memory
+			if w.Status != "running" {
+				cpu = ui.Faint.Render("-")
+				mem = ui.Faint.Render("-")
+			}
+
+			t.Row(w.ID, w.Branch, status, commits, cpu, mem, formatDuration(time.Since(w.Created)))
 		}
 
 		fmt.Println(t)

@@ -25,6 +25,9 @@ type Worker struct {
 	Worktree  string
 	Status    string
 	Created   time.Time
+	Commits   int    // commits ahead of default branch
+	CPU       string // container CPU usage
+	Memory    string // container memory usage
 }
 
 // Spawn creates a new worker: worktree → container → hooks → terminal
@@ -257,6 +260,8 @@ func List(cfg *config.Config) ([]Worker, error) {
 	for _, info := range infos {
 		vars := config.WorkerVars(cfg, info.ID)
 		branch, _ := worktree.GetBranch(vars.Worktree)
+		commits := worktree.CommitCount(cfg.ProjectRoot, vars.Worktree)
+		stats := docker.Stats(info.Container)
 		workers = append(workers, Worker{
 			ID:        info.ID,
 			Branch:    branch,
@@ -264,6 +269,9 @@ func List(cfg *config.Config) ([]Worker, error) {
 			Worktree:  vars.Worktree,
 			Status:    info.Status,
 			Created:   info.Created,
+			Commits:   commits,
+			CPU:       stats.CPU,
+			Memory:    stats.Memory,
 		})
 	}
 	return workers, nil

@@ -15,5 +15,5 @@ fi
 
 set -e
 
-echo "🚀 Worker ready: $TASK_ID"
+echo "🚀 Worker ready: $HIVE_WORKER_ID"
 exec "$@"
