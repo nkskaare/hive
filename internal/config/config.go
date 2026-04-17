@@ -100,7 +100,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.ConfigDir = filepath.Dir(absPath)
-	cfg.ProjectRoot = cfg.ConfigDir
+	cfg.ProjectRoot = resolveProjectRoot(cfg.ConfigDir)
 
 	if cfg.Project.Name == "" {
 		cfg.Project.Name = filepath.Base(cfg.ProjectRoot)
@@ -178,9 +178,14 @@ func findConfigFile() (string, error) {
 		return "", err
 	}
 	for {
-		path := filepath.Join(dir, "hive.toml")
-		if _, err := os.Stat(path); err == nil {
-			return path, nil
+		// Check hive.toml in current dir, then in .agents/ subdirectory
+		for _, candidate := range []string{
+			filepath.Join(dir, "hive.toml"),
+			filepath.Join(dir, ".agents", "hive.toml"),
+		} {
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate, nil
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -189,4 +194,21 @@ func findConfigFile() (string, error) {
 		dir = parent
 	}
 	return "", fmt.Errorf("hive.toml not found. Run 'hive init' to create one")
+}
+
+// resolveProjectRoot walks up from dir to find the git repository root.
+// Falls back to dir itself if no .git is found.
+func resolveProjectRoot(dir string) string {
+	d := dir
+	for {
+		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
+			return d
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			break
+		}
+		d = parent
+	}
+	return dir
 }
