@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// Exists checks whether a worktree directory already exists
+func Exists(worktreePath string) bool {
+	_, err := os.Stat(worktreePath)
+	return err == nil
+}
+
 // Create creates a git worktree at worktreePath.
 // Creates the branch if it doesn't exist, otherwise checks it out.
 func Create(projectRoot, worktreePath, branch string) error {

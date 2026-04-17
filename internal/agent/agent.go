@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/nkskaare/hive/internal/config"
 	"github.com/nkskaare/hive/internal/docker"
@@ -29,7 +30,44 @@ type Agent struct {
 func Spawn(cfg *config.Config, agentID, branch string) error {
 	vars := config.AgentVars(cfg, agentID)
 
-	// 1. Create worktree
+	// 1. Handle existing worktree conflict
+	if worktree.Exists(vars.Worktree) {
+		var choice string
+		err := huh.NewSelect[string]().
+			Title(fmt.Sprintf("Worktree %s already exists", ui.Bold.Render(agentID))).
+			Options(
+				huh.NewOption("Overwrite (remove and recreate)", "overwrite"),
+				huh.NewOption("Rename (pick a new agent ID)", "rename"),
+				huh.NewOption("Cancel", "cancel"),
+			).
+			Value(&choice).
+			Run()
+		if err != nil {
+			return err
+		}
+		switch choice {
+		case "overwrite":
+			ui.SubMsg("removing existing worktree")
+			worktree.Remove(vars.Worktree)
+			worktree.Prune(cfg.ProjectRoot)
+		case "rename":
+			var newID string
+			if err := huh.NewInput().
+				Title("New Agent ID").
+				Placeholder(agentID + "-2").
+				Validate(huh.ValidateNotEmpty()).
+				Value(&newID).
+				Run(); err != nil {
+				return err
+			}
+			agentID = newID
+			vars = config.AgentVars(cfg, agentID)
+		case "cancel":
+			return fmt.Errorf("spawn cancelled")
+		}
+	}
+
+	// 2. Create worktree
 	var worktreeErr error
 	if err := spinner.New().
 		Title(fmt.Sprintf("Creating worktree for %s on branch %s", ui.Bold.Render(agentID), ui.Bold.Render(branch))).
@@ -105,18 +143,19 @@ func Kill(cfg *config.Config, agentID string, keepBranch bool) error {
 	// Infer branch before we destroy the worktree
 	branch, _ := worktree.GetBranch(vars.Worktree)
 
+	// 1. Pre-kill hooks
+	for _, hook := range cfg.Hooks.PreKill {
+		resolved := config.Resolve(hook, vars)
+		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
+		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
+			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+		}
+	}
+
 	var killErr error
 	if err := spinner.New().
 		Title(fmt.Sprintf("Stopping agent %s", ui.Bold.Render(agentID))).
 		Action(func() {
-			// 1. Pre-kill hooks
-			for _, hook := range cfg.Hooks.PreKill {
-				resolved := config.Resolve(hook, vars)
-				if err := runHook(resolved, cfg.ProjectRoot); err != nil {
-					fmt.Fprintf(os.Stderr, "hook failed: %v\n", err)
-				}
-			}
-
 			// 2. Stop and remove container
 			docker.Stop(vars.Container)
 			docker.Remove(vars.Container)
