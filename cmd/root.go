@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	cfgFile string
-	dryRun  bool
-	cfg     *config.Config
+	cfgFile      string
+	dryRun       bool
+	disableHooks bool
+	cfg          *config.Config
 )
 
 var rootCmd = &cobra.Command{

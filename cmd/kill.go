@@ -69,11 +69,12 @@ var killCmd = &cobra.Command{
 			return nil
 		}
 
-		return agent.Kill(cfg, agentID, keepBranch)
+		return agent.Kill(cfg, agentID, keepBranch, disableHooks)
 	},
 }
 
 func init() {
 	killCmd.Flags().BoolVar(&keepBranch, "keep-branch", false, "do not delete the git branch after teardown")
+	killCmd.Flags().BoolVar(&disableHooks, "disable-hooks", false, "skip pre-kill hooks")
 	rootCmd.AddCommand(killCmd)
 }

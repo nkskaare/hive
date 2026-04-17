@@ -41,10 +41,11 @@ var spawnCmd = &cobra.Command{
 			return nil
 		}
 
-		return agent.Spawn(cfg, agentID, branch)
+		return agent.Spawn(cfg, agentID, branch, disableHooks)
 	},
 }
 
 func init() {
+	spawnCmd.Flags().BoolVar(&disableHooks, "disable-hooks", false, "skip post-spawn hooks")
 	rootCmd.AddCommand(spawnCmd)
 }

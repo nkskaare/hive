@@ -28,7 +28,7 @@ type Agent struct {
 }
 
 // Spawn creates a new agent: worktree → container → hooks → terminal
-func Spawn(cfg *config.Config, agentID, branch string) error {
+func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error {
 	vars := config.AgentVars(cfg, agentID)
 
 	// 1. Handle existing worktree conflict
@@ -100,11 +100,13 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 	}
 
 	// 3. Run post-spawn hooks
-	for _, hook := range cfg.Hooks.PostSpawn {
-		resolved := config.Resolve(hook, vars)
-		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-		if err := runHook(resolved, vars); err != nil {
-			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+	if !disableHooks {
+		for _, hook := range cfg.Hooks.PostSpawn {
+			resolved := config.Resolve(hook, vars)
+			ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
+			if err := runHook(resolved, vars); err != nil {
+				ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+			}
 		}
 	}
 
@@ -138,18 +140,20 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 }
 
 // Kill tears down an agent: hooks → container → worktree → branch → terminal
-func Kill(cfg *config.Config, agentID string, keepBranch bool) error {
+func Kill(cfg *config.Config, agentID string, keepBranch, disableHooks bool) error {
 	vars := config.AgentVars(cfg, agentID)
 
 	// Infer branch before we destroy the worktree
 	branch, _ := worktree.GetBranch(vars.Worktree)
 
 	// 1. Pre-kill hooks
-	for _, hook := range cfg.Hooks.PreKill {
-		resolved := config.Resolve(hook, vars)
-		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-		if err := runHook(resolved, vars); err != nil {
-			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+	if !disableHooks {
+		for _, hook := range cfg.Hooks.PreKill {
+			resolved := config.Resolve(hook, vars)
+			ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
+			if err := runHook(resolved, vars); err != nil {
+				ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+			}
 		}
 	}
 
