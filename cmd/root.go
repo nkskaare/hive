@@ -17,8 +17,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "hive",
-	Short: "Agent sandbox orchestrator",
-	Long:  "Hive orchestrates isolated AI agent sandboxes using Docker containers and git worktrees.",
+	Short: "Worker sandbox orchestrator",
+	Long:  "Hive orchestrates isolated worker sandboxes using Docker containers and git worktrees.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for init and help
 		if cmd.Name() == "init" || cmd.Name() == "help" {

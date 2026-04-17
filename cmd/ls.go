@@ -6,22 +6,22 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
-	"github.com/nkskaare/hive/internal/agent"
 	"github.com/nkskaare/hive/internal/ui"
+	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
 
 var lsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List active agent sandboxes",
+	Short: "List active worker sandboxes",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agents, err := agent.List(cfg)
+		workers, err := worker.List(cfg)
 		if err != nil {
 			return err
 		}
 
-		if len(agents) == 0 {
-			fmt.Println(ui.Faint.Render("No active agents."))
+		if len(workers) == 0 {
+			fmt.Println(ui.Faint.Render("No active workers."))
 			return nil
 		}
 
@@ -40,8 +40,8 @@ var lsCmd = &cobra.Command{
 				return s
 			})
 
-		for _, a := range agents {
-			status := a.Status
+		for _, w := range workers {
+			status := w.Status
 			switch status {
 			case "running":
 				status = lipgloss.NewStyle().Foreground(ui.Green).Render(status)
@@ -50,7 +50,7 @@ var lsCmd = &cobra.Command{
 			default:
 				status = lipgloss.NewStyle().Foreground(ui.Yellow).Render(status)
 			}
-			t.Row(a.ID, a.Branch, a.Container, status, formatDuration(time.Since(a.Created)))
+			t.Row(w.ID, w.Branch, w.Container, status, formatDuration(time.Since(w.Created)))
 		}
 
 		fmt.Println(t)

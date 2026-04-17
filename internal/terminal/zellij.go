@@ -82,7 +82,7 @@ func (z *Zellij) Attach(session, tabName string) error {
 		z.RemoveSession(session)
 		return fmt.Errorf("session %q was dead and has been cleaned up; re-run to create a new one", session)
 	}
-	// Focus the agent's tab before attaching so the user lands on it
+	// Focus the worker's tab before attaching so the user lands on it
 	if tabName != "" {
 		_ = exec.Command("zellij", "--session", session, "action", "go-to-tab-name", tabName).Run()
 	}

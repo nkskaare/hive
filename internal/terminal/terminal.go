@@ -3,9 +3,9 @@ package terminal
 import "fmt"
 
 // Provider is the interface for terminal multiplexer integrations.
-// Implementations manage sessions and tabs for agent monitoring.
+// Implementations manage sessions and tabs for worker monitoring.
 type Provider interface {
-	// AddTab adds a tab for an agent to the session.
+	// AddTab adds a tab for a worker to the session.
 	// Creates the session if it doesn't exist.
 	AddTab(session, containerName, layoutFile string) error
 

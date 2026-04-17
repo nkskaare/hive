@@ -65,7 +65,7 @@ func volumeArgs(containerCfg *config.ContainerConfig, vars config.Vars) ([]strin
 func labelArgs(name string, containerCfg *config.ContainerConfig, vars config.Vars) []string {
 	args := []string{
 		"-l", "hive=true",
-		"-l", "hive.agent.id=" + vars.AgentID,
+		"-l", "hive.worker.id=" + vars.WorkerID,
 		"-l", "hive.project=" + vars.Project,
 	}
 	for k, v := range containerCfg.Labels {
@@ -79,6 +79,11 @@ func ExecDetached(container, command string) error {
 	return run("docker", "exec", "-d", container, "sh", "-c", command)
 }
 
+// Build builds a Docker image from a Dockerfile
+func Build(tag, dockerfile, context string) error {
+	return run("docker", "build", "-t", tag, "-f", dockerfile, context)
+}
+
 // Stop stops a container gracefully
 func Stop(name string) error {
 	return run("docker", "stop", name)
@@ -89,8 +94,8 @@ func Remove(name string) error {
 	return run("docker", "rm", "-f", name)
 }
 
-// AgentInfo represents a running hive-managed agent container
-type AgentInfo struct {
+// WorkerInfo represents a running hive-managed worker container
+type WorkerInfo struct {
 	ID        string
 	Container string
 	Status    string
@@ -113,7 +118,7 @@ type inspectConfig struct {
 }
 
 // List returns all hive-managed containers, optionally filtered by project
-func List(project string) ([]AgentInfo, error) {
+func List(project string) ([]WorkerInfo, error) {
 	args := []string{"ps", "-a", "--filter", "label=hive=true", "--format", "{{.Names}}"}
 	if project != "" {
 		args = append(args, "--filter", "label=hive.project="+project)
@@ -129,7 +134,7 @@ func List(project string) ([]AgentInfo, error) {
 		return nil, nil
 	}
 
-	var agents []AgentInfo
+	var workers []WorkerInfo
 	for _, name := range lines {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -139,12 +144,12 @@ func List(project string) ([]AgentInfo, error) {
 		if err != nil {
 			continue
 		}
-		agents = append(agents, *info)
+		workers = append(workers, *info)
 	}
-	return agents, nil
+	return workers, nil
 }
 
-func inspect(name string) (*AgentInfo, error) {
+func inspect(name string) (*WorkerInfo, error) {
 	out, err := exec.Command("docker", "inspect", name).Output()
 	if err != nil {
 		return nil, err
@@ -161,8 +166,8 @@ func inspect(name string) (*AgentInfo, error) {
 	r := results[0]
 	created, _ := time.Parse(time.RFC3339Nano, r.Created)
 
-	return &AgentInfo{
-		ID:        r.Config.Labels["hive.agent.id"],
+	return &WorkerInfo{
+		ID:        r.Config.Labels["hive.worker.id"],
 		Container: strings.TrimPrefix(r.Name, "/"),
 		Status:    r.State.Status,
 		Created:   created,

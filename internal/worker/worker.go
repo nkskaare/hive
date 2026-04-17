@@ -1,4 +1,4 @@
-package agent
+package worker
 
 import (
 	"fmt"
@@ -17,8 +17,8 @@ import (
 	"github.com/nkskaare/hive/internal/worktree"
 )
 
-// Agent represents a hive-managed agent sandbox
-type Agent struct {
+// Worker represents a hive-managed worker sandbox
+type Worker struct {
 	ID        string
 	Branch    string
 	Container string
@@ -27,18 +27,18 @@ type Agent struct {
 	Created   time.Time
 }
 
-// Spawn creates a new agent: worktree → container → hooks → terminal
-func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error {
-	vars := config.AgentVars(cfg, agentID)
+// Spawn creates a new worker: worktree → container → hooks → terminal
+func Spawn(cfg *config.Config, workerID, branch string, disableHooks bool) error {
+	vars := config.WorkerVars(cfg, workerID)
 
 	// 1. Handle existing worktree conflict
 	if worktree.Exists(vars.Worktree) {
 		var choice string
 		err := huh.NewSelect[string]().
-			Title(fmt.Sprintf("Worktree %s already exists", ui.Bold.Render(agentID))).
+			Title(fmt.Sprintf("Worktree %s already exists", ui.Bold.Render(workerID))).
 			Options(
 				huh.NewOption("Overwrite (remove and recreate)", "overwrite"),
-				huh.NewOption("Rename (pick a new agent ID)", "rename"),
+				huh.NewOption("Rename (pick a new worker ID)", "rename"),
 				huh.NewOption("Cancel", "cancel"),
 			).
 			Value(&choice).
@@ -54,24 +54,44 @@ func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error 
 		case "rename":
 			var newID string
 			if err := huh.NewInput().
-				Title("New Agent ID").
-				Placeholder(agentID + "-2").
+				Title("New Worker ID").
+				Placeholder(workerID + "-2").
 				Validate(huh.ValidateNotEmpty()).
 				Value(&newID).
 				Run(); err != nil {
 				return err
 			}
-			agentID = newID
-			vars = config.AgentVars(cfg, agentID)
+			workerID = newID
+			vars = config.WorkerVars(cfg, workerID)
 		case "cancel":
 			return fmt.Errorf("spawn cancelled")
 		}
 	}
 
-	// 2. Create worktree
+	if err := Create(cfg, workerID, branch); err != nil {
+		return err
+	}
+
+	if err := Start(cfg, workerID, disableHooks); err != nil {
+		return err
+	}
+
+	ui.SuccessMsg(fmt.Sprintf("Worker %s ready (%s)", ui.Bold.Render(workerID), vars.Container))
+
+	if err := Attach(cfg, workerID); err != nil {
+		ui.WarnMsg(fmt.Sprintf("Terminal: %v", err))
+	}
+
+	return nil
+}
+
+// Create sets up the git worktree for a worker
+func Create(cfg *config.Config, workerID, branch string) error {
+	vars := config.WorkerVars(cfg, workerID)
+
 	var worktreeErr error
 	if err := spinner.New().
-		Title(fmt.Sprintf("Creating worktree for %s on branch %s", ui.Bold.Render(agentID), ui.Bold.Render(branch))).
+		Title(fmt.Sprintf("Creating worktree for %s on branch %s", ui.Bold.Render(workerID), ui.Bold.Render(branch))).
 		Action(func() {
 			worktreeErr = worktree.Create(cfg.ProjectRoot, vars.Worktree, branch)
 		}).Run(); err != nil {
@@ -79,6 +99,19 @@ func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error 
 	}
 	if worktreeErr != nil {
 		return fmt.Errorf("worktree: %w", worktreeErr)
+	}
+	return nil
+}
+
+// Start builds (if configured) and starts the container, then runs post-spawn hooks
+func Start(cfg *config.Config, workerID string, disableHooks bool) error {
+	vars := config.WorkerVars(cfg, workerID)
+
+	// 1. Build image if Dockerfile is configured
+	if cfg.Container.Dockerfile != "" {
+		if err := buildImage(cfg, vars); err != nil {
+			return err
+		}
 	}
 
 	// 2. Start container
@@ -88,14 +121,10 @@ func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error 
 		Action(func() {
 			containerErr = docker.CreateAndStart(vars.Container, &cfg.Container, vars)
 		}).Run(); err != nil {
-		worktree.Remove(vars.Worktree)
 		return err
 	}
 	if containerErr != nil {
 		ui.ErrorMsg(fmt.Sprintf("Container failed: %v", containerErr))
-		ui.SubMsg("cleaning up worktree")
-		worktree.Remove(vars.Worktree)
-		worktree.Prune(cfg.ProjectRoot)
 		return fmt.Errorf("container: %w", containerErr)
 	}
 
@@ -110,28 +139,32 @@ func Spawn(cfg *config.Config, agentID, branch string, disableHooks bool) error 
 		}
 	}
 
-	// 4. Start agent CLI inside the container (background)
-	if cfg.Agent.Command != "" {
-		agentCmd := config.Resolve(cfg.Agent.Command, vars)
-		ui.SubMsg(fmt.Sprintf("agent: %s", agentCmd))
-		if err := docker.ExecDetached(vars.Container, agentCmd); err != nil {
-			ui.WarnMsg(fmt.Sprintf("Agent start: %v", err))
-		}
-	}
-
-	ui.SuccessMsg(fmt.Sprintf("Agent %s ready (%s)", ui.Bold.Render(agentID), vars.Container))
-
-	// 5. Attach terminal tab
-	if err := Attach(cfg, agentID); err != nil {
-		ui.WarnMsg(fmt.Sprintf("Terminal: %v", err))
-	}
-
 	return nil
 }
 
-// Kill tears down an agent: hooks → container → worktree → branch → terminal
-func Kill(cfg *config.Config, agentID string, keepBranch, disableHooks bool) error {
-	vars := config.AgentVars(cfg, agentID)
+// Restart stops the container and starts it again, keeping the worktree intact
+func Restart(cfg *config.Config, workerID string, disableHooks bool) error {
+	vars := config.WorkerVars(cfg, workerID)
+
+	var stopErr error
+	if err := spinner.New().
+		Title(fmt.Sprintf("Stopping container %s", ui.Bold.Render(vars.Container))).
+		Action(func() {
+			docker.Stop(vars.Container)
+			docker.Remove(vars.Container)
+		}).Run(); err != nil {
+		return err
+	}
+	if stopErr != nil {
+		return stopErr
+	}
+
+	return Start(cfg, workerID, disableHooks)
+}
+
+// Kill tears down a worker: hooks → container → worktree → branch → terminal
+func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) error {
+	vars := config.WorkerVars(cfg, workerID)
 
 	// Infer branch before we destroy the worktree
 	branch, _ := worktree.GetBranch(vars.Worktree)
@@ -149,27 +182,20 @@ func Kill(cfg *config.Config, agentID string, keepBranch, disableHooks bool) err
 
 	var killErr error
 	if err := spinner.New().
-		Title(fmt.Sprintf("Stopping agent %s", ui.Bold.Render(agentID))).
+		Title(fmt.Sprintf("Stopping worker %s", ui.Bold.Render(workerID))).
 		Action(func() {
-			// 2. Stop and remove container
 			docker.Stop(vars.Container)
 			docker.Remove(vars.Container)
-
-			// 3. Remove worktree
 			worktree.Remove(vars.Worktree)
-
-			// 4. Delete branch
 			if !keepBranch && branch != "" {
 				worktree.DeleteBranch(cfg.ProjectRoot, branch)
 			}
-
-			// 5. Prune stale worktree refs
 			worktree.Prune(cfg.ProjectRoot)
 		}).Run(); err != nil {
 		killErr = err
 	}
 
-	// 6. Clean up terminal session if no agents remain
+	// Clean up terminal session if no workers remain
 	remaining, _ := docker.List(cfg.Project.Name)
 	if len(remaining) == 0 {
 		tp := terminal.NewProvider(cfg.Terminal.Provider)
@@ -181,24 +207,23 @@ func Kill(cfg *config.Config, agentID string, keepBranch, disableHooks bool) err
 		return killErr
 	}
 
-	ui.SuccessMsg(fmt.Sprintf("Agent %s cleaned up", ui.Bold.Render(agentID)))
+	ui.SuccessMsg(fmt.Sprintf("Worker %s cleaned up", ui.Bold.Render(workerID)))
 	return nil
 }
 
-// Attach opens or focuses the terminal tab for an agent.
-// If the session doesn't have the agent's tab yet, it adds the layout first.
+// Attach opens or focuses the terminal tab for a worker.
+// If the session doesn't have the worker's tab yet, it adds the layout first.
 // If no session exists, it creates one.
-func Attach(cfg *config.Config, agentID string) error {
+func Attach(cfg *config.Config, workerID string) error {
 	if cfg.Terminal.Layout == "" {
 		return nil
 	}
 
-	vars := config.AgentVars(cfg, agentID)
+	vars := config.WorkerVars(cfg, workerID)
 	tp := terminal.NewProvider(cfg.Terminal.Provider)
 	session := config.Resolve(cfg.Terminal.Session, vars)
 
 	if !tp.HasSession(session) {
-		// No session: create with layout (may block to attach)
 		layoutFile, err := resolveLayout(cfg, vars)
 		if err != nil {
 			return fmt.Errorf("layout: %w", err)
@@ -207,7 +232,6 @@ func Attach(cfg *config.Config, agentID string) error {
 		return tp.AddTab(session, vars.Container, layoutFile)
 	}
 
-	// Session exists: check if tab already exists, if not add it
 	if !tp.HasTab(session, vars.Container) {
 		layoutFile, err := resolveLayout(cfg, vars)
 		if err != nil {
@@ -219,22 +243,21 @@ func Attach(cfg *config.Config, agentID string) error {
 		}
 	}
 
-	// Focus the tab and attach
 	return tp.Attach(session, vars.Container)
 }
 
-// List returns all active agents for the project
-func List(cfg *config.Config) ([]Agent, error) {
+// List returns all active workers for the project
+func List(cfg *config.Config) ([]Worker, error) {
 	infos, err := docker.List(cfg.Project.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	agents := make([]Agent, 0, len(infos))
+	workers := make([]Worker, 0, len(infos))
 	for _, info := range infos {
-		vars := config.AgentVars(cfg, info.ID)
+		vars := config.WorkerVars(cfg, info.ID)
 		branch, _ := worktree.GetBranch(vars.Worktree)
-		agents = append(agents, Agent{
+		workers = append(workers, Worker{
 			ID:        info.ID,
 			Branch:    branch,
 			Container: info.Container,
@@ -243,7 +266,41 @@ func List(cfg *config.Config) ([]Agent, error) {
 			Created:   info.Created,
 		})
 	}
-	return agents, nil
+	return workers, nil
+}
+
+// Exec runs a command inside a worker's container interactively
+func Exec(cfg *config.Config, workerID string, command []string) error {
+	vars := config.WorkerVars(cfg, workerID)
+	args := append([]string{"exec", "-it", vars.Container}, command...)
+	cmd := exec.Command("docker", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func buildImage(cfg *config.Config, vars config.Vars) error {
+	dockerfile := cfg.Container.Dockerfile
+	if !filepath.IsAbs(dockerfile) {
+		dockerfile = filepath.Join(cfg.ConfigDir, dockerfile)
+	}
+	context := cfg.Container.Context
+	if context == "" {
+		context = cfg.ConfigDir
+	} else if !filepath.IsAbs(context) {
+		context = filepath.Join(cfg.ConfigDir, context)
+	}
+
+	var buildErr error
+	if err := spinner.New().
+		Title(fmt.Sprintf("Building image %s", ui.Bold.Render(cfg.Container.Image))).
+		Action(func() {
+			buildErr = docker.Build(cfg.Container.Image, dockerfile, context)
+		}).Run(); err != nil {
+		return err
+	}
+	return buildErr
 }
 
 func runHook(command string, vars config.Vars) error {
@@ -252,7 +309,7 @@ func runHook(command string, vars config.Vars) error {
 	cmd.Stdout = ui.IndentWriter(os.Stdout)
 	cmd.Stderr = ui.IndentWriter(os.Stderr)
 	cmd.Env = append(os.Environ(),
-		"HIVE_AGENT_ID="+vars.AgentID,
+		"HIVE_WORKER_ID="+vars.WorkerID,
 		"HIVE_CONTAINER="+vars.Container,
 		"HIVE_PROJECT="+vars.Project,
 		"HIVE_PROJECT_ROOT="+vars.ProjectRoot,
@@ -287,13 +344,10 @@ func resolveLayout(cfg *config.Config, vars config.Vars) (string, error) {
 	return tmp.Name(), nil
 }
 
-// resolveLayoutVars substitutes {var} placeholders in layout files.
-// Uses simple string replacement instead of Go templates to avoid
-// conflicts with Docker format strings like {{.Name}}.
 func resolveLayoutVars(content string, vars config.Vars) string {
 	pairs := []string{
 		"{container}", vars.Container,
-		"{agent_id}", vars.AgentID,
+		"{worker_id}", vars.WorkerID,
 		"{project}", vars.Project,
 		"{project_root}", vars.ProjectRoot,
 		"{config_dir}", vars.ConfigDir,

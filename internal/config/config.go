@@ -17,7 +17,6 @@ type Config struct {
 	Project   ProjectConfig   `toml:"project"`
 	Worktree  WorktreeConfig  `toml:"worktree"`
 	Container ContainerConfig `toml:"container"`
-	Agent     AgentConfig     `toml:"agent"`
 	Hooks     HooksConfig     `toml:"hooks"`
 	Terminal  TerminalConfig    `toml:"terminal"`
 	UserVars  map[string]string `toml:"vars"`
@@ -39,16 +38,13 @@ type WorktreeConfig struct {
 // Volumes use Docker-native "host:container" syntax.
 // Env values are evaluated as shell expressions via `sh -c`.
 type ContainerConfig struct {
-	Image   string            `toml:"image"`
-	Workdir string            `toml:"workdir"`
-	Env     map[string]string `toml:"env"`
-	Volumes []string          `toml:"volumes"`
-	Labels  map[string]string `toml:"labels"`
-}
-
-// AgentConfig configures the AI agent CLI to run inside the container
-type AgentConfig struct {
-	Command string `toml:"command"`
+	Image      string            `toml:"image"`
+	Dockerfile string            `toml:"dockerfile"`
+	Context    string            `toml:"context"`
+	Workdir    string            `toml:"workdir"`
+	Env        map[string]string `toml:"env"`
+	Volumes    []string          `toml:"volumes"`
+	Labels     map[string]string `toml:"labels"`
 }
 
 type HooksConfig struct {
@@ -63,13 +59,13 @@ type TerminalConfig struct {
 }
 
 // Vars holds template variables resolved at runtime.
-// Built-in fields are available as {{ .Project }}, {{ .AgentID }}, etc.
+// Built-in fields are available as {{ .Project }}, {{ .WorkerID }}, etc.
 // User-defined vars from [vars] are available as {{ .Vars.key }}.
 type Vars struct {
 	Project     string
 	ProjectRoot string
 	ConfigDir   string
-	AgentID     string
+	WorkerID    string
 	Worktree    string
 	Container   string
 	Vars        map[string]string
@@ -122,21 +118,21 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// AgentVars returns the full set of variables for a specific agent
-func AgentVars(cfg *Config, agentID string) Vars {
+// WorkerVars returns the full set of variables for a specific worker
+func WorkerVars(cfg *Config, workerID string) Vars {
 	v := Vars{
 		Project:     cfg.Project.Name,
 		ProjectRoot: cfg.ProjectRoot,
 		ConfigDir:   cfg.ConfigDir,
-		AgentID:     agentID,
-		Container:   "hive-" + agentID,
+		WorkerID:    workerID,
+		Container:   "hive-" + workerID,
 	}
 
 	worktreeRoot := Resolve(cfg.Worktree.Root, v)
 	if !filepath.IsAbs(worktreeRoot) {
 		worktreeRoot = filepath.Join(cfg.ProjectRoot, worktreeRoot)
 	}
-	v.Worktree = filepath.Join(worktreeRoot, agentID)
+	v.Worktree = filepath.Join(worktreeRoot, workerID)
 
 	// Resolve user-defined vars: template expansion first, then shell eval
 	if len(cfg.UserVars) > 0 {
@@ -180,10 +176,10 @@ func findConfigFile() (string, error) {
 		return "", err
 	}
 	for {
-		// Check hive.toml in current dir, then in .agents/ subdirectory
+		// Check hive.toml in current dir, then in .workers/ subdirectory
 		for _, candidate := range []string{
 			filepath.Join(dir, "hive.toml"),
-			filepath.Join(dir, ".agents", "hive.toml"),
+			filepath.Join(dir, ".workers", "hive.toml"),
 		} {
 			if _, err := os.Stat(candidate); err == nil {
 				return candidate, nil

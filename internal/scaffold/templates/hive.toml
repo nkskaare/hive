@@ -10,7 +10,7 @@
 # root = "../{{ .Project }}.worktrees"
 
 [container]
-image = "hive-agent:latest"
+image = "hive-worker:latest"
 workdir = "/app"
 volumes = [
     "{{ .Worktree }}:/app",
@@ -22,17 +22,18 @@ volumes = [
 # Env values are shell-evaluated, so subshells and $VAR references work:
 # GH_TOKEN = "$(gh auth token)"
 # AWS_PROFILE = "$AWS_PROFILE"
-TASK_ID = "{{ .AgentID }}"
+TASK_ID = "{{ .WorkerID }}"
 PROJECT_NAME = "{{ .Project }}"
 
-[agent]
-# command = "claude --dangerously-skip-permissions"
+# [container.build]
+# dockerfile = "Dockerfile"
+# context = "."
 
 [hooks]
-# post_spawn = ["./scripts/post-spawn.sh {{ .AgentID }}"]
-# pre_kill = ["./scripts/pre-kill.sh {{ .AgentID }}"]
+# post_spawn = ["./scripts/post-spawn.sh {{ .WorkerID }}"]
+# pre_kill = ["./scripts/pre-kill.sh {{ .WorkerID }}"]
 
 [terminal]
 provider = "none"        # "zellij" | "tmux" | "none"
-# layout = "agent-tab.kdl"
+# layout = "worker-tab.kdl"
 # session = "{{ .Project }}"

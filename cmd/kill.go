@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	"github.com/nkskaare/hive/internal/agent"
+	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -12,35 +12,34 @@ var keepBranch bool
 
 var killCmd = &cobra.Command{
 	Use:   "kill [id]",
-	Short: "Tear down an agent sandbox",
+	Short: "Tear down a worker sandbox",
 	Long:  "Runs pre-kill hooks, stops the container, removes the worktree and branch, and cleans up the terminal session.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var agentID string
+		var workerID string
 
 		if len(args) > 0 {
-			agentID = args[0]
+			workerID = args[0]
 		} else {
-			// Interactive: let user pick from running agents
-			agents, err := agent.List(cfg)
+			workers, err := worker.List(cfg)
 			if err != nil {
 				return err
 			}
-			if len(agents) == 0 {
-				fmt.Println("No active agents.")
+			if len(workers) == 0 {
+				fmt.Println("No active workers.")
 				return nil
 			}
 
-			options := make([]huh.Option[string], len(agents))
-			for i, a := range agents {
-				label := fmt.Sprintf("%s (%s) [%s]", a.ID, a.Branch, a.Status)
-				options[i] = huh.NewOption(label, a.ID)
+			options := make([]huh.Option[string], len(workers))
+			for i, w := range workers {
+				label := fmt.Sprintf("%s (%s) [%s]", w.ID, w.Branch, w.Status)
+				options[i] = huh.NewOption(label, w.ID)
 			}
 
 			err = huh.NewSelect[string]().
-				Title("Select agent to kill").
+				Title("Select worker to kill").
 				Options(options...).
-				Value(&agentID).
+				Value(&workerID).
 				Run()
 			if err != nil {
 				return err
@@ -48,14 +47,13 @@ var killCmd = &cobra.Command{
 		}
 
 		if dryRun {
-			fmt.Printf("Would kill agent %q (keep-branch=%v)\n", agentID, keepBranch)
+			fmt.Printf("Would kill worker %q (keep-branch=%v)\n", workerID, keepBranch)
 			return nil
 		}
 
-		// Confirm before teardown
 		var confirm bool
 		err := huh.NewConfirm().
-			Title(fmt.Sprintf("Kill agent %q?", agentID)).
+			Title(fmt.Sprintf("Kill worker %q?", workerID)).
 			Description("This will stop the container, remove the worktree, and delete the branch.").
 			Affirmative("Yes, kill it").
 			Negative("Cancel").
@@ -69,7 +67,7 @@ var killCmd = &cobra.Command{
 			return nil
 		}
 
-		return agent.Kill(cfg, agentID, keepBranch, disableHooks)
+		return worker.Kill(cfg, workerID, keepBranch, disableHooks)
 	},
 }
 

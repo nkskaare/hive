@@ -8,13 +8,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var attachCmd = &cobra.Command{
-	Use:   "attach [worker-id]",
-	Short: "Attach to a worker's terminal tab",
-	Long:  "Connects to the project's terminal session and focuses the specified worker's tab. Adds the layout tab if it doesn't exist yet.",
+var restartCmd = &cobra.Command{
+	Use:   "restart [id]",
+	Short: "Restart a worker's container",
+	Long:  "Stops and re-creates the container for an existing worker, keeping the worktree intact.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var workerID string
+
 		if len(args) > 0 {
 			workerID = args[0]
 		} else {
@@ -26,13 +27,15 @@ var attachCmd = &cobra.Command{
 				fmt.Println("No active workers.")
 				return nil
 			}
+
 			options := make([]huh.Option[string], len(workers))
 			for i, w := range workers {
 				label := fmt.Sprintf("%s (%s) [%s]", w.ID, w.Branch, w.Status)
 				options[i] = huh.NewOption(label, w.ID)
 			}
+
 			err = huh.NewSelect[string]().
-				Title("Select worker to attach to").
+				Title("Select worker to restart").
 				Options(options...).
 				Value(&workerID).
 				Run()
@@ -41,10 +44,16 @@ var attachCmd = &cobra.Command{
 			}
 		}
 
-		return worker.Attach(cfg, workerID)
+		if dryRun {
+			fmt.Printf("Would restart worker %q\n", workerID)
+			return nil
+		}
+
+		return worker.Restart(cfg, workerID, disableHooks)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(attachCmd)
+	restartCmd.Flags().BoolVar(&disableHooks, "disable-hooks", false, "skip hooks during restart")
+	rootCmd.AddCommand(restartCmd)
 }

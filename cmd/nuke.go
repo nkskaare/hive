@@ -4,35 +4,35 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	"github.com/nkskaare/hive/internal/agent"
 	"github.com/nkskaare/hive/internal/ui"
+	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
 
 var nukeCmd = &cobra.Command{
 	Use:   "nuke",
-	Short: "Tear down all agent sandboxes",
+	Short: "Tear down all worker sandboxes",
 	Long:  "Stops all containers, removes all worktrees and branches, and cleans up the terminal session.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agents, err := agent.List(cfg)
+		workers, err := worker.List(cfg)
 		if err != nil {
 			return err
 		}
-		if len(agents) == 0 {
-			fmt.Println("No active agents.")
+		if len(workers) == 0 {
+			fmt.Println("No active workers.")
 			return nil
 		}
 
-		fmt.Printf("Found %d active agent(s):\n", len(agents))
-		for _, a := range agents {
-			ui.SubMsg(fmt.Sprintf("%s (%s) [%s]", a.ID, a.Branch, a.Status))
+		fmt.Printf("Found %d active worker(s):\n", len(workers))
+		for _, w := range workers {
+			ui.SubMsg(fmt.Sprintf("%s (%s) [%s]", w.ID, w.Branch, w.Status))
 		}
 		fmt.Println()
 
 		var confirm bool
 		err = huh.NewConfirm().
-			Title(fmt.Sprintf("Nuke all %d agents?", len(agents))).
+			Title(fmt.Sprintf("Nuke all %d workers?", len(workers))).
 			Description("This will stop all containers, remove all worktrees, and delete all branches.").
 			Affirmative("Yes, nuke everything").
 			Negative("Cancel").
@@ -47,15 +47,15 @@ var nukeCmd = &cobra.Command{
 		}
 
 		var failed int
-		for _, a := range agents {
-			if err := agent.Kill(cfg, a.ID, keepBranch, disableHooks); err != nil {
-				ui.ErrorMsg(fmt.Sprintf("Failed to kill %s: %v", a.ID, err))
+		for _, w := range workers {
+			if err := worker.Kill(cfg, w.ID, keepBranch, disableHooks); err != nil {
+				ui.ErrorMsg(fmt.Sprintf("Failed to kill %s: %v", w.ID, err))
 				failed++
 			}
 		}
 
 		if failed > 0 {
-			return fmt.Errorf("%d agent(s) failed to tear down", failed)
+			return fmt.Errorf("%d worker(s) failed to tear down", failed)
 		}
 		return nil
 	},

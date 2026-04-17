@@ -4,26 +4,26 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	"github.com/nkskaare/hive/internal/agent"
+	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
 
 var spawnCmd = &cobra.Command{
 	Use:   "spawn [id] [branch]",
-	Short: "Spawn a new agent sandbox",
+	Short: "Spawn a new worker sandbox",
 	Long:  "Creates a git worktree, starts a Docker container, runs post-spawn hooks, and opens a terminal tab.",
 	Args:  cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var agentID, branch string
+		var workerID, branch string
 
 		if len(args) >= 1 {
-			agentID = args[0]
+			workerID = args[0]
 		} else {
 			err := huh.NewInput().
-				Title("Agent ID").
+				Title("Worker ID").
 				Placeholder("e.g. fix-login-bug").
 				Validate(huh.ValidateNotEmpty()).
-				Value(&agentID).
+				Value(&workerID).
 				Run()
 			if err != nil {
 				return err
@@ -33,15 +33,15 @@ var spawnCmd = &cobra.Command{
 		if len(args) >= 2 {
 			branch = args[1]
 		} else {
-			branch = agentID
+			branch = workerID
 		}
 
 		if dryRun {
-			fmt.Printf("Would spawn agent %q on branch %q\n", agentID, branch)
+			fmt.Printf("Would spawn worker %q on branch %q\n", workerID, branch)
 			return nil
 		}
 
-		return agent.Spawn(cfg, agentID, branch, disableHooks)
+		return worker.Spawn(cfg, workerID, branch, disableHooks)
 	},
 }
 

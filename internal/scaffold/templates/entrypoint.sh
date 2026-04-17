@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🤖 Agent initializing..."
+echo "🐝 Worker initializing..."
 
 # Non-critical steps
 set +e
@@ -15,5 +15,5 @@ fi
 
 set -e
 
-echo "🚀 Agent ready: $TASK_ID"
+echo "🚀 Worker ready: $TASK_ID"
 exec "$@"
