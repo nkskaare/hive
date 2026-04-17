@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/hive-sandbox/hive/internal/agent"
+	"github.com/hive-sandbox/hive/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -20,17 +21,40 @@ var lsCmd = &cobra.Command{
 		}
 
 		if len(agents) == 0 {
-			fmt.Println("No active agents.")
+			fmt.Println(ui.Faint.Render("No active agents."))
 			return nil
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tBRANCH\tCONTAINER\tSTATUS\tAGE")
+		t := table.New().
+			Border(lipgloss.RoundedBorder()).
+			BorderStyle(lipgloss.NewStyle().Foreground(ui.Purple)).
+			Headers("ID", "BRANCH", "CONTAINER", "STATUS", "AGE").
+			StyleFunc(func(row, col int) lipgloss.Style {
+				s := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+				if row == table.HeaderRow {
+					return s.Bold(true).Foreground(ui.Purple)
+				}
+				if row%2 == 0 {
+					return s.Foreground(ui.Gray)
+				}
+				return s
+			})
+
 		for _, a := range agents {
-			age := formatDuration(time.Since(a.Created))
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Branch, a.Container, a.Status, age)
+			status := a.Status
+			switch status {
+			case "running":
+				status = lipgloss.NewStyle().Foreground(ui.Green).Render(status)
+			case "exited":
+				status = lipgloss.NewStyle().Foreground(ui.Red).Render(status)
+			default:
+				status = lipgloss.NewStyle().Foreground(ui.Yellow).Render(status)
+			}
+			t.Row(a.ID, a.Branch, a.Container, status, formatDuration(time.Since(a.Created)))
 		}
-		return w.Flush()
+
+		fmt.Println(t)
+		return nil
 	},
 }
 

@@ -1,9 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/hive-sandbox/hive/internal/scaffold"
+	"github.com/hive-sandbox/hive/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +14,7 @@ var initCmd = &cobra.Command{
 		if err := scaffold.Init("."); err != nil {
 			return err
 		}
-		fmt.Println("✅ Hive initialized. Edit hive.toml to configure your project.")
+		ui.SuccessMsg("Hive initialized. Edit hive.toml to configure your project.")
 		return nil
 	},
 }

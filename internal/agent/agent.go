@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/hive-sandbox/hive/internal/config"
 	"github.com/hive-sandbox/hive/internal/docker"
 	"github.com/hive-sandbox/hive/internal/terminal"
+	"github.com/hive-sandbox/hive/internal/ui"
 	"github.com/hive-sandbox/hive/internal/worktree"
 )
 
@@ -28,33 +30,48 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 	vars := config.AgentVars(cfg, agentID)
 
 	// 1. Create worktree
-	fmt.Printf("📂 Creating worktree for %s on branch %s\n", agentID, branch)
-	if err := worktree.Create(cfg.ProjectRoot, vars.Worktree, branch); err != nil {
-		return fmt.Errorf("worktree: %w", err)
+	var worktreeErr error
+	if err := spinner.New().
+		Title(fmt.Sprintf("Creating worktree for %s on branch %s", ui.Bold.Render(agentID), ui.Bold.Render(branch))).
+		Action(func() {
+			worktreeErr = worktree.Create(cfg.ProjectRoot, vars.Worktree, branch)
+		}).Run(); err != nil {
+		return err
+	}
+	if worktreeErr != nil {
+		return fmt.Errorf("worktree: %w", worktreeErr)
 	}
 
 	// 2. Start container
-	fmt.Printf("🐳 Starting container %s\n", vars.Container)
-	if err := docker.CreateAndStart(vars.Container, &cfg.Container, vars); err != nil {
+	var containerErr error
+	if err := spinner.New().
+		Title(fmt.Sprintf("Starting container %s", ui.Bold.Render(vars.Container))).
+		Action(func() {
+			containerErr = docker.CreateAndStart(vars.Container, &cfg.Container, vars)
+		}).Run(); err != nil {
 		worktree.Remove(vars.Worktree)
-		return fmt.Errorf("container: %w", err)
+		return err
+	}
+	if containerErr != nil {
+		worktree.Remove(vars.Worktree)
+		return fmt.Errorf("container: %w", containerErr)
 	}
 
 	// 3. Run post-spawn hooks
 	for _, hook := range cfg.Hooks.PostSpawn {
 		resolved := config.Resolve(hook, vars)
-		fmt.Printf("🪝 %s\n", resolved)
+		ui.StepMsg(">", fmt.Sprintf("Hook: %s", resolved))
 		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
-			fmt.Printf("⚠️  Hook failed: %v\n", err)
+			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
 		}
 	}
 
 	// 4. Start agent CLI inside the container (background)
 	if cfg.Agent.Command != "" {
 		agentCmd := config.Resolve(cfg.Agent.Command, vars)
-		fmt.Printf("🤖 Starting agent: %s\n", agentCmd)
+		ui.StepMsg(">", fmt.Sprintf("Starting agent: %s", agentCmd))
 		if err := docker.ExecDetached(vars.Container, agentCmd); err != nil {
-			fmt.Printf("⚠️  Agent start: %v\n", err)
+			ui.WarnMsg(fmt.Sprintf("Agent start: %v", err))
 		}
 	}
 
@@ -63,17 +80,17 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 		session := config.Resolve(cfg.Terminal.Session, vars)
 		layoutFile, err := resolveLayout(cfg, vars)
 		if err != nil {
-			fmt.Printf("⚠️  Layout error: %v\n", err)
+			ui.WarnMsg(fmt.Sprintf("Layout error: %v", err))
 		} else {
 			tp := terminal.NewProvider(cfg.Terminal.Provider)
 			if err := tp.AddTab(session, vars.Container, layoutFile); err != nil {
-				fmt.Printf("⚠️  Terminal: %v\n", err)
+				ui.WarnMsg(fmt.Sprintf("Terminal: %v", err))
 			}
 			os.Remove(layoutFile)
 		}
 	}
 
-	fmt.Printf("✅ Agent %s ready (%s)\n", agentID, vars.Container)
+	ui.SuccessMsg(fmt.Sprintf("Agent %s ready (%s)", ui.Bold.Render(agentID), vars.Container))
 	return nil
 }
 
@@ -84,40 +101,35 @@ func Kill(cfg *config.Config, agentID string, keepBranch bool) error {
 	// Infer branch before we destroy the worktree
 	branch, _ := worktree.GetBranch(vars.Worktree)
 
-	fmt.Printf("🛑 Killing agent %s\n", agentID)
+	var killErr error
+	if err := spinner.New().
+		Title(fmt.Sprintf("Stopping agent %s", ui.Bold.Render(agentID))).
+		Action(func() {
+			// 1. Pre-kill hooks
+			for _, hook := range cfg.Hooks.PreKill {
+				resolved := config.Resolve(hook, vars)
+				if err := runHook(resolved, cfg.ProjectRoot); err != nil {
+					fmt.Fprintf(os.Stderr, "hook failed: %v\n", err)
+				}
+			}
 
-	// 1. Pre-kill hooks
-	for _, hook := range cfg.Hooks.PreKill {
-		resolved := config.Resolve(hook, vars)
-		fmt.Printf("🪝 %s\n", resolved)
-		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
-			fmt.Printf("⚠️  Hook failed: %v\n", err)
-		}
-	}
+			// 2. Stop and remove container
+			docker.Stop(vars.Container)
+			docker.Remove(vars.Container)
 
-	// 2. Stop and remove container
-	if err := docker.Stop(vars.Container); err != nil {
-		fmt.Printf("⚠️  Stop: %v\n", err)
-	}
-	if err := docker.Remove(vars.Container); err != nil {
-		fmt.Printf("⚠️  Remove: %v\n", err)
-	}
+			// 3. Remove worktree
+			worktree.Remove(vars.Worktree)
 
-	// 3. Remove worktree
-	if err := worktree.Remove(vars.Worktree); err != nil {
-		fmt.Printf("⚠️  Worktree: %v\n", err)
-	}
+			// 4. Delete branch
+			if !keepBranch && branch != "" {
+				worktree.DeleteBranch(cfg.ProjectRoot, branch)
+			}
 
-	// 4. Delete branch
-	if !keepBranch && branch != "" {
-		fmt.Printf("🌿 Deleting branch %s\n", branch)
-		if err := worktree.DeleteBranch(cfg.ProjectRoot, branch); err != nil {
-			fmt.Printf("⚠️  Branch: %v\n", err)
-		}
+			// 5. Prune stale worktree refs
+			worktree.Prune(cfg.ProjectRoot)
+		}).Run(); err != nil {
+		killErr = err
 	}
-
-	// 5. Prune stale worktree refs
-	worktree.Prune(cfg.ProjectRoot)
 
 	// 6. Clean up terminal session if no agents remain
 	remaining, _ := docker.List(cfg.Project.Name)
@@ -127,7 +139,11 @@ func Kill(cfg *config.Config, agentID string, keepBranch bool) error {
 		tp.RemoveSession(session)
 	}
 
-	fmt.Printf("✅ Agent %s cleaned up\n", agentID)
+	if killErr != nil {
+		return killErr
+	}
+
+	ui.SuccessMsg(fmt.Sprintf("Agent %s cleaned up", ui.Bold.Render(agentID)))
 	return nil
 }
 

@@ -3,20 +3,37 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/charmbracelet/huh"
 	"github.com/hive-sandbox/hive/internal/agent"
 	"github.com/spf13/cobra"
 )
 
 var spawnCmd = &cobra.Command{
-	Use:   "spawn <id> [branch]",
+	Use:   "spawn [id] [branch]",
 	Short: "Spawn a new agent sandbox",
 	Long:  "Creates a git worktree, starts a Docker container, runs post-spawn hooks, and opens a terminal tab.",
-	Args:  cobra.RangeArgs(1, 2),
+	Args:  cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agentID := args[0]
-		branch := agentID
-		if len(args) > 1 {
+		var agentID, branch string
+
+		if len(args) >= 1 {
+			agentID = args[0]
+		} else {
+			err := huh.NewInput().
+				Title("Agent ID").
+				Placeholder("e.g. fix-login-bug").
+				Validate(huh.ValidateNotEmpty()).
+				Value(&agentID).
+				Run()
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(args) >= 2 {
 			branch = args[1]
+		} else {
+			branch = agentID
 		}
 
 		if dryRun {

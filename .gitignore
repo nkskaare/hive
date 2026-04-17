@@ -1,0 +1,11 @@
+# Build output
+hive
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
