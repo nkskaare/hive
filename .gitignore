@@ -9,3 +9,5 @@ hive
 *.dylib
 *.test
 *.out
+
+.vscode/
