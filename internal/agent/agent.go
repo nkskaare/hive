@@ -102,7 +102,7 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 	for _, hook := range cfg.Hooks.PostSpawn {
 		resolved := config.Resolve(hook, vars)
 		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
+		if err := runHook(resolved, vars); err != nil {
 			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
 		}
 	}
@@ -147,7 +147,7 @@ func Kill(cfg *config.Config, agentID string, keepBranch bool) error {
 	for _, hook := range cfg.Hooks.PreKill {
 		resolved := config.Resolve(hook, vars)
 		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
+		if err := runHook(resolved, vars); err != nil {
 			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
 		}
 	}
@@ -213,11 +213,18 @@ func List(cfg *config.Config) ([]Agent, error) {
 	return agents, nil
 }
 
-func runHook(command, dir string) error {
+func runHook(command string, vars config.Vars) error {
 	cmd := exec.Command("sh", "-c", command)
-	cmd.Dir = dir
+	cmd.Dir = vars.ProjectRoot
 	cmd.Stdout = ui.IndentWriter(os.Stdout)
 	cmd.Stderr = ui.IndentWriter(os.Stderr)
+	cmd.Env = append(os.Environ(),
+		"HIVE_AGENT_ID="+vars.AgentID,
+		"HIVE_CONTAINER="+vars.Container,
+		"HIVE_PROJECT="+vars.Project,
+		"HIVE_PROJECT_ROOT="+vars.ProjectRoot,
+		"HIVE_WORKTREE="+vars.Worktree,
+	)
 	return cmd.Run()
 }
 
