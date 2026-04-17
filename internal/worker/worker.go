@@ -283,13 +283,13 @@ func Exec(cfg *config.Config, workerID string, command []string) error {
 func buildImage(cfg *config.Config, vars config.Vars) error {
 	dockerfile := cfg.Container.Dockerfile
 	if !filepath.IsAbs(dockerfile) {
-		dockerfile = filepath.Join(cfg.ConfigDir, dockerfile)
+		dockerfile = filepath.Join(cfg.ProjectRoot, dockerfile)
 	}
 	context := cfg.Container.Context
 	if context == "" {
-		context = cfg.ConfigDir
+		context = cfg.ProjectRoot
 	} else if !filepath.IsAbs(context) {
-		context = filepath.Join(cfg.ConfigDir, context)
+		context = filepath.Join(cfg.ProjectRoot, context)
 	}
 
 	var buildErr error
@@ -305,7 +305,7 @@ func buildImage(cfg *config.Config, vars config.Vars) error {
 
 func runHook(command string, vars config.Vars) error {
 	cmd := exec.Command("sh", "-c", command)
-	cmd.Dir = vars.ConfigDir
+	cmd.Dir = vars.ProjectRoot
 	cmd.Stdout = ui.IndentWriter(os.Stdout)
 	cmd.Stderr = ui.IndentWriter(os.Stderr)
 	cmd.Env = append(os.Environ(),
@@ -321,7 +321,7 @@ func runHook(command string, vars config.Vars) error {
 func resolveLayout(cfg *config.Config, vars config.Vars) (string, error) {
 	layoutPath := cfg.Terminal.Layout
 	if !filepath.IsAbs(layoutPath) {
-		layoutPath = filepath.Join(cfg.ConfigDir, layoutPath)
+		layoutPath = filepath.Join(cfg.ProjectRoot, layoutPath)
 	}
 
 	data, err := os.ReadFile(layoutPath)
@@ -350,7 +350,6 @@ func resolveLayoutVars(content string, vars config.Vars) string {
 		"{worker_id}", vars.WorkerID,
 		"{project}", vars.Project,
 		"{project_root}", vars.ProjectRoot,
-		"{config_dir}", vars.ConfigDir,
 		"{worktree}", vars.Worktree,
 	}
 	for k, v := range vars.Vars {

@@ -23,7 +23,6 @@ type Config struct {
 
 	// Resolved at load time, not from TOML
 	ProjectRoot string `toml:"-"`
-	ConfigDir   string `toml:"-"`
 }
 
 type ProjectConfig struct {
@@ -44,6 +43,7 @@ type ContainerConfig struct {
 	Workdir    string            `toml:"workdir"`
 	Env        map[string]string `toml:"env"`
 	Volumes    []string          `toml:"volumes"`
+	Ports      []string          `toml:"ports"`
 	Labels     map[string]string `toml:"labels"`
 }
 
@@ -64,7 +64,6 @@ type TerminalConfig struct {
 type Vars struct {
 	Project     string
 	ProjectRoot string
-	ConfigDir   string
 	WorkerID    string
 	Worktree    string
 	Container   string
@@ -96,8 +95,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.ConfigDir = filepath.Dir(absPath)
-	cfg.ProjectRoot = resolveProjectRoot(cfg.ConfigDir)
+	cfg.ProjectRoot = resolveProjectRoot(filepath.Dir(absPath))
 
 	if cfg.Project.Name == "" {
 		cfg.Project.Name = filepath.Base(cfg.ProjectRoot)
@@ -123,7 +121,6 @@ func WorkerVars(cfg *Config, workerID string) Vars {
 	v := Vars{
 		Project:     cfg.Project.Name,
 		ProjectRoot: cfg.ProjectRoot,
-		ConfigDir:   cfg.ConfigDir,
 		WorkerID:    workerID,
 		Container:   "hive-" + workerID,
 	}
@@ -176,14 +173,9 @@ func findConfigFile() (string, error) {
 		return "", err
 	}
 	for {
-		// Check hive.toml in current dir, then in .workers/ subdirectory
-		for _, candidate := range []string{
-			filepath.Join(dir, "hive.toml"),
-			filepath.Join(dir, ".workers", "hive.toml"),
-		} {
-			if _, err := os.Stat(candidate); err == nil {
-				return candidate, nil
-			}
+		candidate := filepath.Join(dir, "hive.toml")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -191,7 +183,7 @@ func findConfigFile() (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf("hive.toml not found. Run 'hive init' to create one")
+	return "", fmt.Errorf("hive.toml not found in project root. Run 'hive init' or use --config")
 }
 
 // resolveProjectRoot walks up from dir to find the git repository root.

@@ -21,6 +21,7 @@ func CreateAndStart(name string, containerCfg *config.ContainerConfig, vars conf
 		return err
 	}
 	args = append(args, volArgs...)
+	args = append(args, portArgs(containerCfg, vars)...)
 	args = append(args, labelArgs(name, containerCfg, vars)...)
 	if containerCfg.Workdir != "" {
 		args = append(args, "-w", containerCfg.Workdir)
@@ -47,7 +48,7 @@ func volumeArgs(containerCfg *config.ContainerConfig, vars config.Vars) ([]strin
 		v := config.Resolve(vol, vars)
 		parts := strings.SplitN(v, ":", 2)
 		if len(parts) == 2 && !filepath.IsAbs(parts[0]) {
-			parts[0] = filepath.Join(vars.ConfigDir, parts[0])
+			parts[0] = filepath.Join(vars.ProjectRoot, parts[0])
 			v = strings.Join(parts, ":")
 		}
 		resolved = append(resolved, v)
@@ -70,6 +71,14 @@ func labelArgs(name string, containerCfg *config.ContainerConfig, vars config.Va
 	}
 	for k, v := range containerCfg.Labels {
 		args = append(args, "-l", k+"="+config.Resolve(v, vars))
+	}
+	return args
+}
+
+func portArgs(containerCfg *config.ContainerConfig, vars config.Vars) []string {
+	var args []string
+	for _, p := range containerCfg.Ports {
+		args = append(args, "-p", config.Resolve(p, vars))
 	}
 	return args
 }
