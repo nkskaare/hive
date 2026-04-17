@@ -3,6 +3,7 @@ package docker
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,45 +13,65 @@ import (
 )
 
 // CreateAndStart assembles and runs `docker run -d` from the resolved config.
-// Volume paths, env vars, and labels are passed through directly.
 func CreateAndStart(name string, containerCfg *config.ContainerConfig, vars config.Vars) error {
 	args := []string{"run", "-d", "--name", name}
+	args = append(args, envArgs(containerCfg, vars)...)
+	volArgs, err := volumeArgs(containerCfg, vars)
+	if err != nil {
+		return err
+	}
+	args = append(args, volArgs...)
+	args = append(args, labelArgs(name, containerCfg, vars)...)
+	if containerCfg.Workdir != "" {
+		args = append(args, "-w", containerCfg.Workdir)
+	}
+	args = append(args, containerCfg.Image)
+	return run("docker", args...)
+}
 
+func envArgs(containerCfg *config.ContainerConfig, vars config.Vars) []string {
+	var args []string
 	for k, v := range containerCfg.Env {
-		// Resolve {template} vars first, then shell-evaluate the result
 		resolved := config.Resolve(v, vars)
 		val := config.ShellEval(resolved)
 		if val != "" {
 			args = append(args, "-e", k+"="+val)
 		}
 	}
+	return args
+}
 
+func volumeArgs(containerCfg *config.ContainerConfig, vars config.Vars) ([]string, error) {
+	resolved := make([]string, 0, len(containerCfg.Volumes))
 	for _, vol := range containerCfg.Volumes {
-		resolved := config.Resolve(vol, vars)
-		// Make the host side absolute if it isn't already
-		parts := strings.SplitN(resolved, ":", 2)
+		v := config.Resolve(vol, vars)
+		parts := strings.SplitN(v, ":", 2)
 		if len(parts) == 2 && !filepath.IsAbs(parts[0]) {
 			parts[0] = filepath.Join(vars.ProjectRoot, parts[0])
-			resolved = strings.Join(parts, ":")
+			v = strings.Join(parts, ":")
 		}
-		args = append(args, "-v", resolved)
+		resolved = append(resolved, v)
 	}
+	if err := ensureNestedMountPoints(resolved); err != nil {
+		return nil, fmt.Errorf("preparing mount points: %w", err)
+	}
+	var args []string
+	for _, v := range resolved {
+		args = append(args, "-v", v)
+	}
+	return args, nil
+}
 
-	// Hive labels for identification
-	args = append(args, "-l", "hive=true")
-	args = append(args, "-l", "hive.agent.id="+vars.AgentID)
-	args = append(args, "-l", "hive.project="+vars.Project)
+func labelArgs(name string, containerCfg *config.ContainerConfig, vars config.Vars) []string {
+	args := []string{
+		"-l", "hive=true",
+		"-l", "hive.agent.id=" + vars.AgentID,
+		"-l", "hive.project=" + vars.Project,
+	}
 	for k, v := range containerCfg.Labels {
 		args = append(args, "-l", k+"="+config.Resolve(v, vars))
 	}
-
-	if containerCfg.Workdir != "" {
-		args = append(args, "-w", containerCfg.Workdir)
-	}
-
-	args = append(args, containerCfg.Image)
-
-	return run("docker", args...)
+	return args
 }
 
 // ExecDetached runs a command inside a container in detached mode
@@ -152,6 +173,65 @@ func run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s %s: %s", name, strings.Join(args[:min(3, len(args))], " "), strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// ensureNestedMountPoints creates placeholder files/dirs so Docker Desktop
+// (VirtioFS on macOS) can handle bind mounts nested inside other bind mounts.
+// For example, if volume A mounts host_dir:/app and volume B mounts
+// some_file:/app/.mcp.json, Docker needs .mcp.json to exist inside host_dir.
+func ensureNestedMountPoints(volumes []string) error {
+	type vol struct {
+		host, container string
+	}
+
+	var mounts []vol
+	for _, v := range volumes {
+		parts := strings.SplitN(v, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		mounts = append(mounts, vol{host: parts[0], container: parts[1]})
+	}
+
+	for i, inner := range mounts {
+		for j, outer := range mounts {
+			if i == j {
+				continue
+			}
+			// Is inner's container path nested inside outer's container path?
+			rel, err := filepath.Rel(outer.container, inner.container)
+			if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+				continue
+			}
+			// inner is nested inside outer — ensure the mount point exists
+			// at the corresponding path inside outer's host directory
+			placeholder := filepath.Join(outer.host, rel)
+			if _, err := os.Stat(placeholder); err == nil {
+				continue // already exists
+			}
+
+			srcInfo, err := os.Stat(inner.host)
+			if err != nil {
+				continue // source doesn't exist, Docker will error anyway
+			}
+
+			if srcInfo.IsDir() {
+				if err := os.MkdirAll(placeholder, 0755); err != nil {
+					return fmt.Errorf("creating mount dir %s: %w", placeholder, err)
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Dir(placeholder), 0755); err != nil {
+					return fmt.Errorf("creating parent dir for %s: %w", placeholder, err)
+				}
+				f, err := os.Create(placeholder)
+				if err != nil {
+					return fmt.Errorf("creating mount placeholder %s: %w", placeholder, err)
+				}
+				f.Close()
+			}
+		}
 	}
 	return nil
 }
