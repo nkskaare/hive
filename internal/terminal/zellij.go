@@ -27,9 +27,9 @@ func (z *Zellij) HasSession(session string) bool {
 // AddTab creates a session or adds a tab to an existing one using the layout file
 func (z *Zellij) AddTab(session, containerName, layoutFile string) error {
 	if z.HasSession(session) {
-		// Session exists: add tab without attaching/blocking.
-		// This works regardless of whether we're inside or outside the session.
-		return exec.Command("zellij", "--session", session, "action", "new-tab", "--layout", layoutFile).Run()
+		// Session exists: add tab by targeting the session via env var.
+		cmd := exec.Command("zellij", "--session", session, "action", "new-tab", containerName, "--layout", layoutFile)
+		return cmd.Run()
 	}
 	// No session: create a new one with the layout (attaches interactively)
 	cmd := exec.Command("zellij", "--session", session, "--new-session-with-layout", layoutFile)
