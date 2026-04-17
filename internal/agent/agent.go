@@ -53,14 +53,17 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 		return err
 	}
 	if containerErr != nil {
+		ui.ErrorMsg(fmt.Sprintf("Container failed: %v", containerErr))
+		ui.SubMsg("cleaning up worktree")
 		worktree.Remove(vars.Worktree)
+		worktree.Prune(cfg.ProjectRoot)
 		return fmt.Errorf("container: %w", containerErr)
 	}
 
 	// 3. Run post-spawn hooks
 	for _, hook := range cfg.Hooks.PostSpawn {
 		resolved := config.Resolve(hook, vars)
-		ui.StepMsg(">", fmt.Sprintf("Hook: %s", resolved))
+		ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
 		if err := runHook(resolved, cfg.ProjectRoot); err != nil {
 			ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
 		}
@@ -69,13 +72,15 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 	// 4. Start agent CLI inside the container (background)
 	if cfg.Agent.Command != "" {
 		agentCmd := config.Resolve(cfg.Agent.Command, vars)
-		ui.StepMsg(">", fmt.Sprintf("Starting agent: %s", agentCmd))
+		ui.SubMsg(fmt.Sprintf("agent: %s", agentCmd))
 		if err := docker.ExecDetached(vars.Container, agentCmd); err != nil {
 			ui.WarnMsg(fmt.Sprintf("Agent start: %v", err))
 		}
 	}
 
-	// 5. Terminal tab
+	ui.SuccessMsg(fmt.Sprintf("Agent %s ready (%s)", ui.Bold.Render(agentID), vars.Container))
+
+	// 5. Terminal tab (may block if creating a new session)
 	if cfg.Terminal.Layout != "" {
 		session := config.Resolve(cfg.Terminal.Session, vars)
 		layoutFile, err := resolveLayout(cfg, vars)
@@ -90,7 +95,6 @@ func Spawn(cfg *config.Config, agentID, branch string) error {
 		}
 	}
 
-	ui.SuccessMsg(fmt.Sprintf("Agent %s ready (%s)", ui.Bold.Render(agentID), vars.Container))
 	return nil
 }
 
@@ -173,8 +177,8 @@ func List(cfg *config.Config) ([]Agent, error) {
 func runHook(command, dir string) error {
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = ui.IndentWriter(os.Stdout)
+	cmd.Stderr = ui.IndentWriter(os.Stderr)
 	return cmd.Run()
 }
 

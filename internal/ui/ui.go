@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -46,4 +48,30 @@ func WarnMsg(msg string) {
 
 func ErrorMsg(msg string) {
 	fmt.Printf("%s %s\n", BadgeErr.Render("ERR"), msg)
+}
+
+// SubMsg prints a dimmed, indented line for subcommand/hook output context
+func SubMsg(msg string) {
+	fmt.Printf("  %s\n", Faint.Render(msg))
+}
+
+// IndentWriter returns a writer that dims and indents each line of output.
+// Use it to wrap hook stdout/stderr for a subcommand feel.
+func IndentWriter(w io.Writer) io.Writer {
+	return &indentWriter{w: w}
+}
+
+type indentWriter struct {
+	w io.Writer
+}
+
+func (iw *indentWriter) Write(p []byte) (int, error) {
+	lines := strings.Split(string(p), "\n")
+	for i, line := range lines {
+		if i == len(lines)-1 && line == "" {
+			break // skip trailing empty line from split
+		}
+		fmt.Fprintf(iw.w, "  %s\n", Faint.Render(line))
+	}
+	return len(p), nil
 }
