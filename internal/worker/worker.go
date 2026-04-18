@@ -162,7 +162,11 @@ func Restart(cfg *config.Config, workerID string, disableHooks bool) error {
 		return stopErr
 	}
 
-	return Start(cfg, workerID, disableHooks)
+	if err := Start(cfg, workerID, disableHooks); err != nil {
+		return err
+	}
+	ui.SuccessMsg(fmt.Sprintf("Worker %s restarted", ui.Bold.Render(workerID)))
+	return nil
 }
 
 // Kill tears down a worker: hooks → container → worktree → branch → terminal

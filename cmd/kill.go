@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
+	"github.com/nkskaare/hive/internal/ui"
 	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ var killCmd = &cobra.Command{
 				return err
 			}
 			if len(workers) == 0 {
-				fmt.Println("No active workers.")
+				fmt.Println(ui.Faint.Render("No active workers."))
 				return nil
 			}
 
@@ -47,7 +48,7 @@ var killCmd = &cobra.Command{
 		}
 
 		if dryRun {
-			fmt.Printf("Would kill worker %q (keep-branch=%v)\n", workerID, keepBranch)
+			ui.SubMsg(fmt.Sprintf("Would kill worker %s (keep-branch=%v)", ui.Bold.Render(workerID), keepBranch))
 			return nil
 		}
 
@@ -63,7 +64,7 @@ var killCmd = &cobra.Command{
 			return err
 		}
 		if !confirm {
-			fmt.Println("Cancelled.")
+			fmt.Println(ui.Faint.Render("Cancelled."))
 			return nil
 		}
 

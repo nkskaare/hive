@@ -20,11 +20,11 @@ var nukeCmd = &cobra.Command{
 			return err
 		}
 		if len(workers) == 0 {
-			fmt.Println("No active workers.")
+			fmt.Println(ui.Faint.Render("No active workers."))
 			return nil
 		}
 
-		fmt.Printf("Found %d active worker(s):\n", len(workers))
+		ui.StepMsg("💣", fmt.Sprintf("Found %d active worker(s):", len(workers)))
 		for _, w := range workers {
 			ui.SubMsg(fmt.Sprintf("%s (%s) [%s]", w.ID, w.Branch, w.Status))
 		}
@@ -42,7 +42,7 @@ var nukeCmd = &cobra.Command{
 			return err
 		}
 		if !confirm {
-			fmt.Println("Cancelled.")
+			fmt.Println(ui.Faint.Render("Cancelled."))
 			return nil
 		}
 
@@ -57,6 +57,7 @@ var nukeCmd = &cobra.Command{
 		if failed > 0 {
 			return fmt.Errorf("%d worker(s) failed to tear down", failed)
 		}
+		ui.SuccessMsg(fmt.Sprintf("All %d workers nuked", len(workers)))
 		return nil
 	},
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
+	"github.com/nkskaare/hive/internal/ui"
 	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,7 @@ var attachCmd = &cobra.Command{
 				return err
 			}
 			if len(workers) == 0 {
-				fmt.Println("No active workers.")
+				fmt.Println(ui.Faint.Render("No active workers."))
 				return nil
 			}
 			options := make([]huh.Option[string], len(workers))

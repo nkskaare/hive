@@ -48,7 +48,12 @@ func envArgs(containerCfg *config.ContainerConfig, vars config.Vars) []string {
 }
 
 func volumeArgs(containerCfg *config.ContainerConfig, vars config.Vars) ([]string, error) {
-	resolved := make([]string, 0, len(containerCfg.Volumes))
+	// Always mount worktree and .git directory
+	// .git is mounted at its host path so worktree gitdir references resolve correctly
+	resolved := []string{
+		vars.Worktree + ":" + containerCfg.Workdir,
+		vars.ProjectRoot + "/.git:" + vars.ProjectRoot + "/.git",
+	}
 	for _, vol := range containerCfg.Volumes {
 		v := config.Resolve(vol, vars)
 		parts := strings.SplitN(v, ":", 2)

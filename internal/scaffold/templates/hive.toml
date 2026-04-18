@@ -12,11 +12,8 @@
 [container]
 image = "hive-worker:latest"
 workdir = "/app"
-volumes = [
-    "{{ .Worktree }}:/app",
-    "{{ .ProjectRoot }}/.git:{{ .ProjectRoot }}/.git",
-    "entrypoint.sh:/usr/local/bin/entrypoint.sh",
-]
+# Additional volumes (worktree and .git are mounted automatically):
+# volumes = ["entrypoint.sh:/usr/local/bin/entrypoint.sh"]
 # ports = ["8080:8080", "3000:3000"]
 
 [container.env]

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
+	"github.com/nkskaare/hive/internal/ui"
 	"github.com/nkskaare/hive/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ var spawnCmd = &cobra.Command{
 		}
 
 		if dryRun {
-			fmt.Printf("Would spawn worker %q on branch %q\n", workerID, branch)
+			ui.SubMsg(fmt.Sprintf("Would spawn worker %s on branch %s", ui.Bold.Render(workerID), ui.Bold.Render(branch)))
 			return nil
 		}
 
