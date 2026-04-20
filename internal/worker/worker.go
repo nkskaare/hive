@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
+	"github.com/nkskaare/hive/internal/backend"
 	"github.com/nkskaare/hive/internal/config"
 	"github.com/nkskaare/hive/internal/docker"
 	"github.com/nkskaare/hive/internal/terminal"
@@ -106,32 +107,27 @@ func Create(cfg *config.Config, workerID, branch string) error {
 	return nil
 }
 
-// Start builds (if configured) and starts the container, then runs post-spawn hooks
+// Start starts the container backend, then runs post-spawn hooks
 func Start(cfg *config.Config, workerID string, disableHooks bool) error {
 	vars := config.WorkerVars(cfg, workerID)
+	be := backend.New(cfg)
 
-	// 1. Build image if Dockerfile is configured
-	if cfg.Container.Dockerfile != "" {
-		if err := buildImage(cfg, vars); err != nil {
-			return err
-		}
-	}
-
-	// 2. Start container
-	var containerErr error
+	var upErr error
 	if err := spinner.New().
-		Title(fmt.Sprintf("Starting container %s", ui.Bold.Render(vars.Container))).
+		Title(fmt.Sprintf("Starting worker %s", ui.Bold.Render(workerID))).
 		Action(func() {
-			containerErr = docker.CreateAndStart(vars.Container, &cfg.Container, vars)
+			upErr = be.Up(cfg, vars)
 		}).Run(); err != nil {
 		return err
 	}
-	if containerErr != nil {
-		ui.ErrorMsg(fmt.Sprintf("Container failed: %v", containerErr))
-		return fmt.Errorf("container: %w", containerErr)
+	if upErr != nil {
+		ui.ErrorMsg(fmt.Sprintf("Container failed: %v", upErr))
+		return fmt.Errorf("container: %w", upErr)
 	}
 
-	// 3. Run post-spawn hooks
+	// Resolve container name (may differ from vars.Container in devcontainer mode)
+	vars.Container = be.ContainerName(vars)
+
 	if !disableHooks {
 		for _, hook := range cfg.Hooks.PostSpawn {
 			resolved := config.Resolve(hook, vars)
@@ -148,13 +144,13 @@ func Start(cfg *config.Config, workerID string, disableHooks bool) error {
 // Restart stops the container and starts it again, keeping the worktree intact
 func Restart(cfg *config.Config, workerID string, disableHooks bool) error {
 	vars := config.WorkerVars(cfg, workerID)
+	be := backend.New(cfg)
 
 	var stopErr error
 	if err := spinner.New().
-		Title(fmt.Sprintf("Stopping container %s", ui.Bold.Render(vars.Container))).
+		Title(fmt.Sprintf("Stopping worker %s", ui.Bold.Render(workerID))).
 		Action(func() {
-			docker.Stop(vars.Container)
-			docker.Remove(vars.Container)
+			stopErr = be.Down(vars)
 		}).Run(); err != nil {
 		return err
 	}
@@ -172,11 +168,11 @@ func Restart(cfg *config.Config, workerID string, disableHooks bool) error {
 // Kill tears down a worker: hooks → container → worktree → branch → terminal
 func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) error {
 	vars := config.WorkerVars(cfg, workerID)
+	be := backend.New(cfg)
+	vars.Container = be.ContainerName(vars)
 
-	// Infer branch before we destroy the worktree
 	branch, _ := worktree.GetBranch(vars.Worktree)
 
-	// 1. Pre-kill hooks
 	if !disableHooks {
 		for _, hook := range cfg.Hooks.PreKill {
 			resolved := config.Resolve(hook, vars)
@@ -191,8 +187,7 @@ func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) er
 	if err := spinner.New().
 		Title(fmt.Sprintf("Stopping worker %s", ui.Bold.Render(workerID))).
 		Action(func() {
-			docker.Stop(vars.Container)
-			docker.Remove(vars.Container)
+			be.Down(vars)
 			worktree.Remove(vars.Worktree)
 			if !keepBranch && branch != "" {
 				worktree.DeleteBranch(cfg.ProjectRoot, branch)
@@ -202,7 +197,6 @@ func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) er
 		killErr = err
 	}
 
-	// Clean up terminal session if no workers remain
 	remaining, _ := docker.List(cfg.Project.Name)
 	if len(remaining) == 0 {
 		tp := terminal.NewProvider(cfg.Terminal.Provider)
@@ -218,15 +212,16 @@ func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) er
 	return nil
 }
 
-// Attach opens or focuses the terminal tab for a worker.
-// If the session doesn't have the worker's tab yet, it adds the layout first.
-// If no session exists, it creates one.
+// Attach opens or focuses the terminal tab for a worker
 func Attach(cfg *config.Config, workerID string) error {
 	if cfg.Terminal.Layout == "" {
 		return nil
 	}
 
 	vars := config.WorkerVars(cfg, workerID)
+	be := backend.New(cfg)
+	vars.Container = be.ContainerName(vars)
+
 	tp := terminal.NewProvider(cfg.Terminal.Provider)
 	session := config.Resolve(cfg.Terminal.Session, vars)
 
@@ -236,21 +231,21 @@ func Attach(cfg *config.Config, workerID string) error {
 			return fmt.Errorf("layout: %w", err)
 		}
 		defer os.Remove(layoutFile)
-		return tp.AddTab(session, vars.Container, layoutFile)
+		return tp.AddTab(session, workerID, layoutFile)
 	}
 
-	if !tp.HasTab(session, vars.Container) {
+	if !tp.HasTab(session, workerID) {
 		layoutFile, err := resolveLayout(cfg, vars)
 		if err != nil {
 			return fmt.Errorf("layout: %w", err)
 		}
 		defer os.Remove(layoutFile)
-		if err := tp.AddTab(session, vars.Container, layoutFile); err != nil {
+		if err := tp.AddTab(session, workerID, layoutFile); err != nil {
 			return err
 		}
 	}
 
-	return tp.Attach(session, vars.Container)
+	return tp.Attach(session, workerID)
 }
 
 // List returns all active workers for the project
@@ -284,35 +279,8 @@ func List(cfg *config.Config) ([]Worker, error) {
 // Exec runs a command inside a worker's container interactively
 func Exec(cfg *config.Config, workerID string, command []string) error {
 	vars := config.WorkerVars(cfg, workerID)
-	args := append([]string{"exec", "-it", vars.Container}, command...)
-	cmd := exec.Command("docker", args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func buildImage(cfg *config.Config, vars config.Vars) error {
-	dockerfile := cfg.Container.Dockerfile
-	if !filepath.IsAbs(dockerfile) {
-		dockerfile = filepath.Join(cfg.ProjectRoot, dockerfile)
-	}
-	context := cfg.Container.Context
-	if context == "" {
-		context = cfg.ProjectRoot
-	} else if !filepath.IsAbs(context) {
-		context = filepath.Join(cfg.ProjectRoot, context)
-	}
-
-	var buildErr error
-	if err := spinner.New().
-		Title(fmt.Sprintf("Building image %s", ui.Bold.Render(cfg.Container.Image))).
-		Action(func() {
-			buildErr = docker.Build(cfg.Container.Image, dockerfile, context)
-		}).Run(); err != nil {
-		return err
-	}
-	return buildErr
+	be := backend.New(cfg)
+	return be.Exec(vars, command)
 }
 
 func runHook(command string, vars config.Vars) error {

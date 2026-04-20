@@ -14,15 +14,21 @@ import (
 
 // Config represents the full hive.toml configuration
 type Config struct {
-	Project   ProjectConfig   `toml:"project"`
-	Worktree  WorktreeConfig  `toml:"worktree"`
-	Container ContainerConfig `toml:"container"`
-	Hooks     HooksConfig     `toml:"hooks"`
-	Terminal  TerminalConfig    `toml:"terminal"`
-	UserVars  map[string]string `toml:"vars"`
+	Project      ProjectConfig      `toml:"project"`
+	Worktree     WorktreeConfig     `toml:"worktree"`
+	Container    ContainerConfig    `toml:"container"`
+	Devcontainer *DevcontainerConfig `toml:"devcontainer"`
+	Hooks        HooksConfig        `toml:"hooks"`
+	Terminal     TerminalConfig     `toml:"terminal"`
+	UserVars     map[string]string  `toml:"vars"`
 
 	// Resolved at load time, not from TOML
 	ProjectRoot string `toml:"-"`
+}
+
+// UseDevcontainer returns true if the [devcontainer] section is present.
+func (c *Config) UseDevcontainer() bool {
+	return c.Devcontainer != nil
 }
 
 type ProjectConfig struct {
@@ -56,6 +62,12 @@ type TerminalConfig struct {
 	Provider string `toml:"provider"`
 	Layout   string `toml:"layout"`
 	Session  string `toml:"session"`
+}
+
+// DevcontainerConfig enables use of the devcontainer CLI instead of raw Docker.
+// Presence of [devcontainer] in hive.toml activates this mode.
+type DevcontainerConfig struct {
+	Config string `toml:"config"` // optional path to devcontainer.json, relative to project root
 }
 
 // Vars holds template variables resolved at runtime.

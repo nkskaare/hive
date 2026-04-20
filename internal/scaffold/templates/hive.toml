@@ -9,6 +9,9 @@
 [worktree]
 # root = "../{{ .Project }}.worktrees"
 
+# ── Backend: choose ONE of [container] or [devcontainer] ──
+
+# Option A: Raw Docker (default)
 [container]
 image = "hive-worker:latest"
 workdir = "/app"
@@ -27,6 +30,12 @@ workdir = "/app"
 # [container.build]
 # dockerfile = "Dockerfile"
 # context = "."
+
+# Option B: Devcontainer (requires `devcontainer` CLI)
+# Delegates to devcontainer.json for image, env, ports, features, lifecycle hooks.
+# Hive auto-mounts .git and injects HIVE_* env vars.
+# [devcontainer]
+# config = ".devcontainer/devcontainer.json"  # optional, auto-detected from worktree
 
 [hooks]
 # post_spawn = ["./scripts/post-spawn.sh {{ .WorkerID }}"]
