@@ -56,6 +56,12 @@ type ContainerConfig struct {
 type HooksConfig struct {
 	PostSpawn []string `toml:"post_spawn"`
 	PreKill   []string `toml:"pre_kill"`
+	Async     *bool    `toml:"async"`
+}
+
+// IsAsync returns whether hooks should run asynchronously (default: true).
+func (h *HooksConfig) IsAsync() bool {
+	return h.Async == nil || *h.Async
 }
 
 type TerminalConfig struct {

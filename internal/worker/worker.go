@@ -107,7 +107,9 @@ func Create(cfg *config.Config, workerID, branch string) error {
 	return nil
 }
 
-// Start starts the container backend, then runs post-spawn hooks
+// Start starts the container backend, then runs post-spawn hooks.
+// In async mode (default), hooks run in the background with output written
+// to <worktree>/.hive/post-spawn.log. In sync mode, hooks run inline.
 func Start(cfg *config.Config, workerID string, disableHooks bool) error {
 	vars := config.WorkerVars(cfg, workerID)
 	be := backend.New(cfg)
@@ -128,12 +130,18 @@ func Start(cfg *config.Config, workerID string, disableHooks bool) error {
 	// Resolve container name (may differ from vars.Container in devcontainer mode)
 	vars.Container = be.ContainerName(vars)
 
-	if !disableHooks {
-		for _, hook := range cfg.Hooks.PostSpawn {
-			resolved := config.Resolve(hook, vars)
-			ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-			if err := runHook(resolved, vars); err != nil {
-				ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+	if !disableHooks && len(cfg.Hooks.PostSpawn) > 0 {
+		if cfg.Hooks.IsAsync() {
+			logPath := filepath.Join(vars.Worktree, ".hive", "post-spawn.log")
+			go runHooksAsync(cfg.Hooks.PostSpawn, vars, logPath)
+			ui.SubMsg(fmt.Sprintf("hooks running in background → %s", logPath))
+		} else {
+			for _, hook := range cfg.Hooks.PostSpawn {
+				resolved := config.Resolve(hook, vars)
+				ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
+				if err := runHook(resolved, vars); err != nil {
+					ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+				}
 			}
 		}
 	}
@@ -173,12 +181,27 @@ func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) er
 
 	branch, _ := worktree.GetBranch(vars.Worktree)
 
-	if !disableHooks {
-		for _, hook := range cfg.Hooks.PreKill {
-			resolved := config.Resolve(hook, vars)
-			ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
-			if err := runHook(resolved, vars); err != nil {
-				ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+	if !disableHooks && len(cfg.Hooks.PreKill) > 0 {
+		if cfg.Hooks.IsAsync() {
+			logPath := filepath.Join(vars.Worktree, ".hive", "pre-kill.log")
+			var hookErr error
+			if err := spinner.New().
+				Title("Running pre-kill hooks").
+				Action(func() {
+					hookErr = runHooksToFile(cfg.Hooks.PreKill, vars, logPath)
+				}).Run(); err != nil {
+				return err
+			}
+			if hookErr != nil {
+				ui.WarnMsg(fmt.Sprintf("Hook failed (see %s)", logPath))
+			}
+		} else {
+			for _, hook := range cfg.Hooks.PreKill {
+				resolved := config.Resolve(hook, vars)
+				ui.SubMsg(fmt.Sprintf("hook: %s", resolved))
+				if err := runHook(resolved, vars); err != nil {
+					ui.WarnMsg(fmt.Sprintf("Hook failed: %v", err))
+				}
 			}
 		}
 	}
@@ -296,6 +319,46 @@ func runHook(command string, vars config.Vars) error {
 		"HIVE_WORKTREE="+vars.Worktree,
 	)
 	return cmd.Run()
+}
+
+func runHooksAsync(hooks []string, vars config.Vars, logPath string) {
+	runHooksToFile(hooks, vars, logPath)
+}
+
+func runHooksToFile(hooks []string, vars config.Vars, logPath string) error {
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		return err
+	}
+	f, err := os.Create(logPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	hookEnv := append(os.Environ(),
+		"HIVE_WORKER_ID="+vars.WorkerID,
+		"HIVE_CONTAINER="+vars.Container,
+		"HIVE_PROJECT="+vars.Project,
+		"HIVE_PROJECT_ROOT="+vars.ProjectRoot,
+		"HIVE_WORKTREE="+vars.Worktree,
+	)
+
+	var lastErr error
+	for _, hook := range hooks {
+		resolved := config.Resolve(hook, vars)
+		fmt.Fprintf(f, "==> %s\n", resolved)
+		cmd := exec.Command("sh", "-c", resolved)
+		cmd.Dir = vars.ProjectRoot
+		cmd.Stdout = f
+		cmd.Stderr = f
+		cmd.Env = hookEnv
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(f, "FAILED: %v\n", err)
+			lastErr = err
+		}
+	}
+	fmt.Fprintf(f, "==> hooks complete\n")
+	return lastErr
 }
 
 func resolveLayout(cfg *config.Config, vars config.Vars) (string, error) {

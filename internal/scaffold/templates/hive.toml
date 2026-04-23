@@ -38,6 +38,7 @@ workdir = "/app"
 # config = ".devcontainer/devcontainer.json"  # optional, auto-detected from worktree
 
 [hooks]
+# async = true  # default: hooks run in background, output to .hive/*.log
 # post_spawn = ["./scripts/post-spawn.sh {{ .WorkerID }}"]
 # pre_kill = ["./scripts/pre-kill.sh {{ .WorkerID }}"]
 
