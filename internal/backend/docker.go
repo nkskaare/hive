@@ -111,6 +111,9 @@ func (d *Docker) createAndStart(name string, containerCfg *config.ContainerConfi
 		args = append(args, "-w", containerCfg.Workdir)
 	}
 	args = append(args, containerCfg.Image)
+	for _, c := range containerCfg.Command {
+		args = append(args, config.Resolve(c, vars))
+	}
 	return dockerRun(args...)
 }
 

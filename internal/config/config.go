@@ -47,6 +47,7 @@ type ContainerConfig struct {
 	Dockerfile string            `toml:"dockerfile"`
 	Context    string            `toml:"context"`
 	Workdir    string            `toml:"workdir"`
+	Command    []string          `toml:"command"`
 	Env        map[string]string `toml:"env"`
 	Volumes    []string          `toml:"volumes"`
 	Ports      []string          `toml:"ports"`
@@ -122,7 +123,7 @@ func Load(path string) (*Config, error) {
 		cfg.Worktree.Root = "../{{ .Project }}.worktrees"
 	}
 	if cfg.Container.Workdir == "" {
-		cfg.Container.Workdir = "/app"
+		cfg.Container.Workdir = "/workspace"
 	}
 	if cfg.Terminal.Provider == "" {
 		cfg.Terminal.Provider = "none"

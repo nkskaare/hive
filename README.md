@@ -74,6 +74,7 @@ Use `[container]` for a straightforward Docker setup. Hive automatically mounts 
 [container]
 image = "node:22-slim"
 workdir = "/workspace"
+# command = ["sleep", "infinity"]  # keep container alive for exec
 # Additional volumes (worktree and .git are mounted automatically):
 # volumes = ["entrypoint.sh:/usr/local/bin/entrypoint.sh"]
 # ports = ["8080:8080", "3000:3000"]

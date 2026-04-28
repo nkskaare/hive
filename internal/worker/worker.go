@@ -215,10 +215,10 @@ func Kill(cfg *config.Config, workerID string, keepBranch, disableHooks bool) er
 		Action(func() {
 			be.Down(vars)
 			worktree.Remove(vars.Worktree)
+			worktree.Prune(cfg.ProjectRoot)
 			if !keepBranch && branch != "" {
 				worktree.DeleteBranch(cfg.ProjectRoot, branch)
 			}
-			worktree.Prune(cfg.ProjectRoot)
 		}).Run(); err != nil {
 		killErr = err
 	}
