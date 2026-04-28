@@ -98,6 +98,9 @@ func Create(cfg *config.Config, workerID, branch string) error {
 		Title(fmt.Sprintf("Creating worktree for %s on branch %s", ui.Bold.Render(workerID), ui.Bold.Render(branch))).
 		Action(func() {
 			worktreeErr = worktree.Create(cfg.ProjectRoot, vars.Worktree, branch)
+			if worktreeErr == nil {
+				worktreeErr = worktree.IsolateGitDir(cfg.ProjectRoot, vars.Worktree, workerID)
+			}
 		}).Run(); err != nil {
 		return err
 	}

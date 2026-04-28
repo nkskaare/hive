@@ -71,10 +71,10 @@ func (d *Docker) createAndStart(name string, containerCfg *config.ContainerConfi
 		}
 	}
 
-	// Volumes — always mount worktree and .git
+	// Volumes — always mount worktree and .git (read-only)
 	volumes := []string{
 		vars.Worktree + ":" + containerCfg.Workdir,
-		vars.ProjectRoot + "/.git:" + vars.ProjectRoot + "/.git",
+		vars.ProjectRoot + "/.git:" + vars.ProjectRoot + "/.git:ro",
 	}
 	for _, vol := range containerCfg.Volumes {
 		v := config.Resolve(vol, vars)

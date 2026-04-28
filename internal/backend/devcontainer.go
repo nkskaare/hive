@@ -31,9 +31,9 @@ func (dc *Devcontainer) Up(cfg *config.Config, vars config.Vars) error {
 	if configPath != "" {
 		args = append(args, "--config", configPath)
 	}
-	// Mount .git at its host path so worktree gitdir references resolve
+	// Mount .git at its host path (read-only) so alternates object access works
 	args = append(args, "--mount",
-		fmt.Sprintf("type=bind,source=%s/.git,target=%s/.git", vars.ProjectRoot, vars.ProjectRoot))
+		fmt.Sprintf("type=bind,source=%s/.git,target=%s/.git,readonly", vars.ProjectRoot, vars.ProjectRoot))
 	for k, v := range map[string]string{
 		"hive":           "true",
 		"hive.worker.id": vars.WorkerID,
