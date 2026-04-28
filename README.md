@@ -1,10 +1,14 @@
-# Hive
+# Hive 🐝
 
 A thin wrapper around Docker containers and git worktrees. Lets you spin up isolated sandboxes for AI coding agents (or anything else) with one command.
 
 Nothing revolutionary — it just automates the tedious parts: creating a worktree, starting a container with the right mounts and env vars, running setup hooks, and tearing it all down cleanly.
 
 Supports two backends: raw Docker for simple setups, or [devcontainers](https://containers.dev/) when you need features, lifecycle hooks, or a richer dev environment.
+
+<p align="center">
+  <img src="demo.gif" alt="hive demo" width="800" />
+</p>
 
 ## Install
 
@@ -68,8 +72,8 @@ Use `[container]` for a straightforward Docker setup. Hive automatically mounts 
 
 ```toml
 [container]
-image = "hive-worker:latest"
-workdir = "/app"
+image = "node:22-slim"
+workdir = "/workspace"
 # Additional volumes (worktree and .git are mounted automatically):
 # volumes = ["entrypoint.sh:/usr/local/bin/entrypoint.sh"]
 # ports = ["8080:8080", "3000:3000"]

@@ -13,8 +13,8 @@
 
 # Option A: Raw Docker (default)
 [container]
-image = "hive-worker:latest"
-workdir = "/app"
+image = "node:22-slim"
+workdir = "/workspace"
 # Additional volumes (worktree and .git are mounted automatically):
 # volumes = ["entrypoint.sh:/usr/local/bin/entrypoint.sh"]
 # ports = ["8080:8080", "3000:3000"]
