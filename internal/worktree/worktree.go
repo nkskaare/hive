@@ -30,15 +30,22 @@ func Create(projectRoot, worktreePath, branch string) error {
 }
 
 // Remove forcefully removes a git worktree.
-// Falls back to rm + prune if the worktree's .git file was rewritten (e.g. by IsolateGitDir).
+// If the worktree uses an isolated gitdir (.hive/gitdir), git worktree remove
+// won't work — we remove the directory directly and let Prune clean up.
 func Remove(worktreePath string) error {
-	err := run("git", "worktree", "remove", "--force", worktreePath)
-	if err != nil {
-		// .git file may point to .hive/gitdir instead of .git/worktrees/<id>,
-		// so git worktree remove may fail — fall back to manual cleanup.
-		os.RemoveAll(worktreePath)
+	if isIsolated(worktreePath) {
+		return os.RemoveAll(worktreePath)
 	}
-	return nil
+	return run("git", "worktree", "remove", "--force", worktreePath)
+}
+
+// isIsolated checks whether a worktree's .git file was rewritten by IsolateGitDir.
+func isIsolated(worktreePath string) bool {
+	data, err := os.ReadFile(filepath.Join(worktreePath, ".git"))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), ".hive/gitdir")
 }
 
 // GetBranch returns the branch name checked out in a worktree
